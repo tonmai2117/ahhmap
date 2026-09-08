@@ -1,12 +1,15 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { Root } from './Root'
+import { BrowserRouter } from 'react-router-dom'
+import App from './App'
 import 'leaflet/dist/leaflet.css'
 import './theme.css'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <Root />
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
   </React.StrictMode>,
 )

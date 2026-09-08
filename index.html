@@ -3,17 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="description" content="แผนที่ AahhMap — Portal ใกล้คุณและเส้นทางกิจกรรม" />
     <title>AahhMap</title>
-    <!-- The splash logo is 78 KB and is the first thing the splash renders.
-         Fetching it during HTML parse, in parallel with the bundle, keeps it
-         from popping in a beat after the gradient. -->
-    <link rel="preload" as="image" href="/brand/aahhmap-logo.png" />
   </head>
   <body>
-    <!-- First paint, before the bundle parses. Kept byte-identical to
-         SPLASH_BACKGROUND in src/pages/Splash.tsx (asserted by Splash.test.tsx);
-         the React splash removes this node from an effect once it is mounted. -->
-    <div id="boot-splash" style="position:fixed;inset:0;background:radial-gradient(120% 90% at 30% 12%, #ff8a5c 0%, #ef5128 46%, #c9381a 100%)"></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

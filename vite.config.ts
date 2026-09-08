@@ -27,5 +27,10 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    include: [
+      'src/standalone/**/*.test.{ts,tsx}',
+      'src/components/MapBottomSheet.test.tsx',
+      'src/pages/mapRegistration.test.ts',
+    ],
   },
 })

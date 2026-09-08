@@ -1,9 +1,4 @@
-import { clearReauthGuard, getIdToken, getLineAccessToken, reauthenticate } from './liff'
-
-const configuredBase = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/+$/, '')
-const BASE = configuredBase
-  ? configuredBase.endsWith('/api') ? configuredBase : `${configuredBase}/api`
-  : '/api'
+import mapData from './data/map.json'
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -11,35 +6,24 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${getIdToken()}`,
-      'X-Line-Access-Token': getLineAccessToken(),
-      ...(init.headers ?? {}),
-    },
-  })
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText })) as { error?: string }
-    if (body.error === 'line_friend_required') {
-      window.dispatchEvent(new Event('line-friend-required'))
-    }
-    // An hour-old id token is not something the player can act on — get a fresh
-    // one and come back to the same screen. The throw still runs; the login or
-    // reload navigates away before anything downstream renders.
-    if (res.status === 401 && body.error === 'invalid_token') reauthenticate()
-    throw new ApiError(res.status, body.error ?? 'request_failed')
+// Preserve the Map response contract without inventing players or portal data.
+async function request<T>(path: string): Promise<T> {
+  const url = new URL(path, 'https://aahhmap.local')
+  if (url.pathname === '/me') {
+    return { coin_balance: mapData.coin_balance } as T
   }
+  if (url.pathname === '/treasures') {
+    return { treasures: mapData.treasures } as T
+  }
+  throw new ApiError(503, 'บริการนี้ยังไม่ได้เชื่อมต่อกับแอปแผนที่')
+}
 
-  clearReauthGuard()
-  return res.json() as Promise<T>
+async function unavailable<T>(): Promise<T> {
+  throw new ApiError(503, 'ยังไม่ได้เชื่อมต่อระบบเกมและรับรางวัล')
 }
 
 export const api = {
-  get:    <T>(path: string)                => request<T>(path),
-  post:   <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST',   body: JSON.stringify(body) }),
-  delete: <T>(path: string)                => request<T>(path, { method: 'DELETE' }),
+  get: <T>(path: string) => request<T>(path),
+  post: <T>(_path: string, _body?: unknown) => unavailable<T>(),
+  delete: <T>(_path: string) => unavailable<T>(),
 }

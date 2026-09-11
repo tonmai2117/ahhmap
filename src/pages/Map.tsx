@@ -2,17 +2,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import L from 'leaflet'
 import '../leafletGlobal'
-import 'leaflet-routing-machine'
 import { api } from '../api'
 import { CoinIcon } from '../components/CoinIcon'
 import { Icon } from '../components/Icon'
 import { LineProfileCard, type LineProfile } from '../components/LineProfileCard'
 import { MapBottomSheet } from '../components/MapBottomSheet'
+import { NavigationPanel } from '../components/NavigationPanel'
+import { WeatherStatus } from '../components/WeatherStatus'
+import { WeatherDemoControls } from '../components/WeatherDemoControls'
 import { Chip, Toast, useToast } from '../components/ui'
 import { useGeolocation } from '../hooks/useGeolocation'
+import { useMapTheme } from '../hooks/useMapTheme'
+import { useWeather } from '../hooks/useWeather'
+import { WeatherMarkerManager } from '../map/weatherMarker'
 import { AR_HIDE_SEEK_CONTENT, arHideSeekBaseUrl, buildArHideSeekDemoUrl, collectThenOpenArHideSeek, demoLaunchForTreasure, regularArPath, type DemoLaunch } from '../externalGame'
 import { getProfile, openExternalWindow } from '../liff'
 import { treasureIcon } from '../map/mapIcons'
+import { DEMO_DESTINATIONS } from '../map/demoDestinations'
 import {
   TIER_COLORS,
   getTier,
@@ -21,33 +27,17 @@ import {
   type MapMode,
   type MapPosition,
 } from '../map/mapDomain'
+import { pointAlongRoute, routeProgress, type Destination, type FetchStatus, type NavigationPhase, type RouteResult, type SimulationStatus, type TravelMode } from '../map/navigationDomain'
+import { fetchRoute, routingErrorMessage } from '../map/routingClient'
 import type { Treasure } from '../types'
 import { userFacingError } from '../utils/errors'
-import { CARTO_TILE_OPTIONS, CARTO_VOYAGER_TILE_URL, PLAYER_MAP_CENTER } from '../utils/mapDefaults'
+import { CARTO_DARK_TILE_URL, CARTO_TILE_OPTIONS, CARTO_VOYAGER_TILE_URL, PLAYER_MAP_CENTER } from '../utils/mapDefaults'
 import { mapRegistrationPath } from './mapRegistration'
 
 type ApiStatusError = { status?: number }
-type RoutingControlWithWaypoints = L.Routing.Control & {
-  spliceWaypoints: (index: number, waypointsToRemove: number, ...waypoints: L.LatLng[]) => void
-}
-type RoutingControlOptionsWithMarker = L.Routing.RoutingControlOptions & {
-  createMarker: () => null
-  addWaypoints: boolean
-  draggableWaypoints: boolean
-  show: boolean
-  routeWhileDragging: boolean
-}
-type RoutingNamespace = {
-  control: (options: RoutingControlOptionsWithMarker) => L.Routing.Control
-  osrmv1: (options: { serviceUrl: string }) => L.Routing.IRouter
-}
 
 function hasStatus(value: unknown): value is ApiStatusError {
   return typeof value === 'object' && value !== null && 'status' in value
-}
-
-function hasRouting(leaflet: typeof L): leaflet is typeof L & { Routing: RoutingNamespace } {
-  return 'Routing' in leaflet
 }
 
 function playerIcon() {
@@ -65,13 +55,25 @@ function playerIcon() {
   })
 }
 
+function destinationIcon() {
+  return L.divIcon({
+    html: '<div class="aahh-destination-pin"><span></span></div>',
+    className: '',
+    iconSize: [34, 42],
+    iconAnchor: [17, 40],
+  })
+}
+
 export default function Map() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const { toast, showToast } = useToast()
+  const { theme, setTheme } = useMapTheme()
   const campaignSlug = searchParams.get('campaign')
   const hostSlug = searchParams.get('host')
+  const isDemo = searchParams.get('demo') === '1'
+  const useRealGps = searchParams.get('gps') === 'real'
 
   const [balance, setBalance] = useState<number | null>(null)
   const [playerName, setPlayerName] = useState('ผู้เล่น')
@@ -84,52 +86,123 @@ export default function Map() {
   const [displayPos, setDisplayPos] = useState<MapPosition | null>(null)
   const [sheetState, setSheetState] = useState<'expanded' | 'collapsed'>('expanded')
   const [sheetHeight, setSheetHeight] = useState(260)
-  const [routeNonce, setRouteNonce] = useState(0)
   const [demoLaunch, setDemoLaunch] = useState<DemoLaunch | null>(null)
   const [portalBusy, setPortalBusy] = useState(false)
+  const [travelMode, setTravelMode] = useState<TravelMode>('walking')
+  const [navigationOpen, setNavigationOpen] = useState(false)
+  const [navigationPhase, setNavigationPhase] = useState<NavigationPhase>('idle')
+  const [routeStatus, setRouteStatus] = useState<FetchStatus>('idle')
+  const [routeError, setRouteError] = useState('')
+  const [destination, setDestination] = useState<Destination | null>(null)
+  const [navigationRoute, setNavigationRoute] = useState<RouteResult | null>(null)
+  const [eventRoute, setEventRoute] = useState<RouteResult | null>(null)
+  const [remainingM, setRemainingM] = useState<number | null>(null)
+  const [currentStepIndex, setCurrentStepIndex] = useState(0)
+  const [simulationStatus, setSimulationStatus] = useState<SimulationStatus>('idle')
+  const [, setSimulationDistance] = useState(0)
+
+  const weatherQueryParam = searchParams.get('weather')
+  const { weather, loading: weatherLoading, error: weatherError } = useWeather(displayPos, weatherQueryParam, isDemo)
+  const weatherMarkerRef = useRef<WeatherMarkerManager | null>(null)
+
+  useEffect(() => {
+    if (!weatherMarkerRef.current) {
+      weatherMarkerRef.current = new WeatherMarkerManager()
+    }
+    if (mapRef.current) {
+      weatherMarkerRef.current.update(mapRef.current, weather, displayPos)
+    }
+    return () => {
+      weatherMarkerRef.current?.remove()
+    }
+  }, [weather, displayPos])
 
   const mapDivRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const playerMarkerRef = useRef<L.Marker | null>(null)
   const accuracyCircRef = useRef<L.Circle | null>(null)
   const treasureLayerRef = useRef<L.LayerGroup | null>(null)
+  const tileLayerRef = useRef<L.TileLayer | null>(null)
+  const routeLayersRef = useRef<L.Polyline[]>([])
+  const destinationMarkerRef = useRef<L.Marker | null>(null)
   const userPannedRef = useRef(false)
-  const routeControlRef = useRef<L.Routing.Control | null>(null)
   const routeOriginRef = useRef<MapPosition | null>(null)
   const displayPosRef = useRef<MapPosition | null>(null)
   const displayPosTimeRef = useRef(0)
   const portalBusyRef = useRef(false)
+  const routeAbortRef = useRef<AbortController | null>(null)
+  const routeRequestIdRef = useRef(0)
+  const pickingDestinationRef = useRef(false)
+  const mapDraggedRef = useRef(false)
+  const sourcePositionRef = useRef<MapPosition | null>(null)
+  const simulationStatusRef = useRef<SimulationStatus>('idle')
+  const lastRerouteAtRef = useRef(0)
 
   const posRef = useRef<MapPosition | null>(null)
   const treasuresRef = useRef<Treasure[]>([])
-  const mapModeRef = useRef<MapMode>('daily')
   treasuresRef.current = treasures
-  mapModeRef.current = mapMode
+  simulationStatusRef.current = simulationStatus
 
   useEffect(() => {
     if (!mapDivRef.current || mapRef.current) return
 
     const map = L.map(mapDivRef.current, { zoomControl: false }).setView(PLAYER_MAP_CENTER, 17)
-    L.tileLayer(CARTO_VOYAGER_TILE_URL, CARTO_TILE_OPTIONS).addTo(map)
+    tileLayerRef.current = L.tileLayer(theme === 'dark' ? CARTO_DARK_TILE_URL : CARTO_VOYAGER_TILE_URL, CARTO_TILE_OPTIONS).addTo(map)
 
     const layer = L.layerGroup().addTo(map)
     treasureLayerRef.current = layer
     mapRef.current = map
 
-    map.on('dragstart', () => { userPannedRef.current = true })
+    map.on('dragstart', () => {
+      userPannedRef.current = true
+      mapDraggedRef.current = true
+    })
+    map.on('click', (event) => {
+      if (!pickingDestinationRef.current) return
+      if (mapDraggedRef.current) {
+        mapDraggedRef.current = false
+        return
+      }
+      const next: Destination = {
+        id: `map-${event.latlng.lat.toFixed(5)}-${event.latlng.lng.toFixed(5)}`,
+        name: 'จุดที่เลือกบนแผนที่',
+        lat: event.latlng.lat,
+        lng: event.latlng.lng,
+        source: 'map',
+      }
+      pickingDestinationRef.current = false
+      setDestination(next)
+      setNavigationPhase('preview')
+      setRouteStatus('idle')
+      setNavigationRoute(null)
+      setSheetState('expanded')
+    })
 
     return () => {
-      if (routeControlRef.current) {
-        map.removeControl(routeControlRef.current)
-        routeControlRef.current = null
-      }
+      routeAbortRef.current?.abort()
       map.remove()
       mapRef.current = null
       treasureLayerRef.current = null
       playerMarkerRef.current = null
       accuracyCircRef.current = null
+      tileLayerRef.current = null
+      routeLayersRef.current = []
+      destinationMarkerRef.current = null
     }
   }, [])
+
+  useEffect(() => {
+    tileLayerRef.current?.setUrl(theme === 'dark' ? CARTO_DARK_TILE_URL : CARTO_VOYAGER_TILE_URL)
+  }, [theme])
+
+  useEffect(() => {
+    const attributionCorner = mapRef.current
+      ?.getContainer()
+      .querySelector<HTMLElement>('.leaflet-bottom.leaflet-right')
+    if (!attributionCorner) return
+    attributionCorner.style.bottom = `${sheetState === 'expanded' ? sheetHeight + 6 : 70}px`
+    attributionCorner.style.transition = 'bottom .3s var(--ease-standard)'
+  }, [sheetHeight, sheetState])
 
   useEffect(() => {
     let active = true
@@ -262,22 +335,18 @@ export default function Map() {
       if (!userPannedRef.current) map.panTo([p.lat, p.lng])
     }
 
-    if (mapModeRef.current === 'event' && routeControlRef.current && routeOriginRef.current) {
-      if (haversine(routeOriginRef.current.lat, routeOriginRef.current.lng, p.lat, p.lng) > 30) {
-        ;(routeControlRef.current as RoutingControlWithWaypoints).spliceWaypoints(0, 1, L.latLng(p.lat, p.lng))
-        routeOriginRef.current = p
-      }
-    } else if (mapModeRef.current === 'event' && !routeControlRef.current) {
-      setRouteNonce((n) => n + 1)
-    }
-
     checkProximity(p, treasuresRef.current)
   }, [checkProximity])
+
+  const handleSourcePosition = useCallback((p: MapPosition) => {
+    sourcePositionRef.current = p
+    if (simulationStatusRef.current === 'idle') handleMapPosition(p)
+  }, [handleMapPosition])
 
   useGeolocation({
     watch: true,
     options: { enableHighAccuracy: true, maximumAge: 3_000 },
-    onPosition: handleMapPosition,
+    onPosition: handleSourcePosition,
     onError: () => setGeoError(true),
   })
 
@@ -286,54 +355,20 @@ export default function Map() {
   }, [treasures, checkProximity])
 
   useEffect(() => {
-    const map = mapRef.current
     const pos = posRef.current
-    if (!map) return
-
-    if (routeControlRef.current) {
-      map.removeControl(routeControlRef.current)
-      routeControlRef.current = null
-      routeOriginRef.current = null
-    }
-
-    if (mapMode !== 'event' || !pos || treasures.length === 0) return
-    if (!hasRouting(L)) {
-      showToast('คำนวณเส้นทางไม่ได้')
+    if (navigationOpen || mapMode !== 'event' || !pos || treasures.length === 0) {
+      setEventRoute(null)
       return
     }
-
+    const controller = new AbortController()
     const ordered = orderByNearestNeighbor(treasures, pos)
-    const control = L.Routing.control({
-      waypoints: [L.latLng(pos.lat, pos.lng), ...ordered.map((t) => L.latLng(t.lat, t.lng))],
-      router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' }),
-      lineOptions: {
-        styles: [
-          { color: '#ffffff', weight: 8, opacity: 0.95 },
-          { color: '#ef5128', weight: 4, opacity: 1 },
-        ],
-        extendToWaypoints: true,
-        missingRouteTolerance: 5,
-      },
-      createMarker: () => null,
-      addWaypoints: false,
-      draggableWaypoints: false,
-      show: false,
-      fitSelectedRoutes: true,
-      routeWhileDragging: false,
-    }).addTo(map) as L.Routing.Control
-
-    control.on('routingerror', () => showToast('คำนวณเส้นทางไม่ได้'))
-    routeControlRef.current = control
-    routeOriginRef.current = pos
-
-    return () => {
-      if (routeControlRef.current === control && mapRef.current) {
-        mapRef.current.removeControl(control)
-        routeControlRef.current = null
-        routeOriginRef.current = null
-      }
-    }
-  }, [mapMode, treasures, routeNonce, showToast])
+    fetchRoute([pos, ...ordered], travelMode, controller.signal)
+      .then(setEventRoute)
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) showToast(routingErrorMessage(error))
+      })
+    return () => controller.abort()
+  }, [mapMode, navigationOpen, treasures, travelMode, showToast])
 
   const routeTreasures = useMemo(() => {
     if (!displayPos) return treasures
@@ -347,6 +382,166 @@ export default function Map() {
     return treasures.filter((t) => haversine(displayPos.lat, displayPos.lng, t.lat, t.lng) <= 500).length
   }, [displayPos, treasures])
 
+  const visibleRoute = navigationOpen ? navigationRoute : eventRoute
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    routeLayersRef.current.forEach((layer) => layer.removeFrom(map))
+    routeLayersRef.current = []
+    if (!visibleRoute?.geometry.length) return
+    const latLngs = visibleRoute.geometry.map(([lng, lat]) => L.latLng(lat, lng))
+    const outline = L.polyline(latLngs, { color: theme === 'dark' ? '#121416' : '#ffffff', weight: 8, opacity: 0.92 }).addTo(map)
+    const line = L.polyline(latLngs, { color: '#ef5128', weight: 4, opacity: 1 }).addTo(map)
+    routeLayersRef.current = [outline, line]
+    return () => {
+      outline.removeFrom(map)
+      line.removeFrom(map)
+      routeLayersRef.current = routeLayersRef.current.filter((layer) => layer !== outline && layer !== line)
+    }
+  }, [visibleRoute, theme])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    destinationMarkerRef.current?.removeFrom(map)
+    destinationMarkerRef.current = null
+    if (destination) {
+      destinationMarkerRef.current = L.marker([destination.lat, destination.lng], { icon: destinationIcon() })
+        .bindTooltip(destination.name, { direction: 'top' })
+        .addTo(map)
+    }
+    return () => {
+      destinationMarkerRef.current?.removeFrom(map)
+      destinationMarkerRef.current = null
+    }
+  }, [destination])
+
+  const chooseDestination = useCallback((next: Destination) => {
+    routeAbortRef.current?.abort()
+    pickingDestinationRef.current = false
+    setNavigationOpen(true)
+    setDestination(next)
+    setNavigationRoute(null)
+    setRouteStatus('idle')
+    setRouteError('')
+    setNavigationPhase('preview')
+    simulationStatusRef.current = 'idle'
+    setSimulationStatus('idle')
+    setSimulationDistance(0)
+    setRemainingM(null)
+    setCurrentStepIndex(0)
+    setSheetState('expanded')
+    mapRef.current?.panTo([next.lat, next.lng])
+  }, [])
+
+  const calculateNavigationRoute = useCallback(async (mode: TravelMode = travelMode, continueNavigation = false) => {
+    const origin = posRef.current
+    if (!origin || !destination) return
+    routeAbortRef.current?.abort()
+    const controller = new AbortController()
+    routeAbortRef.current = controller
+    const requestId = ++routeRequestIdRef.current
+    setRouteStatus('loading')
+    setRouteError('')
+    setNavigationRoute(null)
+    simulationStatusRef.current = 'idle'
+    setSimulationStatus('idle')
+    setSimulationDistance(0)
+    routeOriginRef.current = { ...origin }
+    try {
+      const result = await fetchRoute([origin, destination], mode, controller.signal)
+      if (requestId !== routeRequestIdRef.current) return
+      setNavigationRoute(result)
+      setRouteStatus('ready')
+      setNavigationPhase(continueNavigation ? 'navigating' : 'preview')
+      setRemainingM(result.distanceM)
+      setCurrentStepIndex(0)
+      const bounds = L.latLngBounds(result.geometry.map(([lng, lat]) => [lat, lng] as [number, number]))
+      mapRef.current?.fitBounds(bounds, { paddingTopLeft: [28, 130], paddingBottomRight: [28, Math.min(sheetHeight + 30, 390)] })
+    } catch (error) {
+      if (requestId !== routeRequestIdRef.current || (error instanceof DOMException && error.name === 'AbortError')) return
+      setRouteStatus('error')
+      setRouteError(routingErrorMessage(error))
+    }
+  }, [destination, sheetHeight, travelMode])
+
+  useEffect(() => {
+    if (!useRealGps || navigationPhase !== 'navigating' || routeStatus !== 'ready' || !displayPos || !routeOriginRef.current) return
+    const now = Date.now()
+    if (haversine(routeOriginRef.current.lat, routeOriginRef.current.lng, displayPos.lat, displayPos.lng) < 30) return
+    if (now - lastRerouteAtRef.current < 15_000) return
+    lastRerouteAtRef.current = now
+    void calculateNavigationRoute(travelMode, true)
+  }, [calculateNavigationRoute, displayPos, navigationPhase, routeStatus, travelMode, useRealGps])
+
+  const changeTravelMode = useCallback((mode: TravelMode) => {
+    setTravelMode(mode)
+    simulationStatusRef.current = 'idle'
+    setSimulationStatus('idle')
+    setSimulationDistance(0)
+    if (navigationRoute && destination) void calculateNavigationRoute(mode)
+  }, [calculateNavigationRoute, destination, navigationRoute])
+
+  const cancelNavigation = useCallback(() => {
+    routeAbortRef.current?.abort()
+    routeRequestIdRef.current += 1
+    pickingDestinationRef.current = false
+    setNavigationOpen(false)
+    setNavigationPhase('idle')
+    setRouteStatus('idle')
+    setRouteError('')
+    setDestination(null)
+    setNavigationRoute(null)
+    simulationStatusRef.current = 'idle'
+    setSimulationStatus('idle')
+    setSimulationDistance(0)
+    setRemainingM(null)
+    setCurrentStepIndex(0)
+    const source = sourcePositionRef.current
+    if (source) handleMapPosition(source)
+  }, [handleMapPosition])
+
+  useEffect(() => {
+    if (navigationPhase !== 'navigating' || !navigationRoute || !displayPos || displayPos.accuracy > 50) return
+    const progress = routeProgress(navigationRoute.geometry, displayPos)
+    setRemainingM(progress.remainingM)
+    let covered = 0
+    let stepIndex = 0
+    for (let i = 0; i < navigationRoute.steps.length; i += 1) {
+      covered += navigationRoute.steps[i].distanceM
+      if (progress.traveledM <= covered) { stepIndex = i; break }
+    }
+    setCurrentStepIndex(stepIndex)
+    const endpoint = navigationRoute.geometry[navigationRoute.geometry.length - 1]
+    if (endpoint && progress.ratio >= 0.9 && haversine(displayPos.lat, displayPos.lng, endpoint[1], endpoint[0]) <= 25) {
+      setNavigationPhase('arrived')
+      simulationStatusRef.current = 'idle'
+      setSimulationStatus('idle')
+      setRemainingM(0)
+      setCurrentStepIndex(Math.max(0, navigationRoute.steps.length - 1))
+    }
+  }, [displayPos, navigationPhase, navigationRoute])
+
+  useEffect(() => {
+    if (simulationStatus !== 'running' || !navigationRoute || useRealGps || !isDemo) return
+    const increment = navigationRoute.distanceM / 60
+    const timer = window.setInterval(() => {
+      setSimulationDistance((current) => {
+        const next = Math.min(navigationRoute.distanceM, current + increment)
+        const point = pointAlongRoute(navigationRoute.geometry, next)
+        if (next >= navigationRoute.distanceM) displayPosRef.current = null
+        if (point) handleMapPosition(point)
+        if (next >= navigationRoute.distanceM) {
+          simulationStatusRef.current = 'idle'
+          setSimulationStatus('idle')
+        }
+        return next
+      })
+    }, 500)
+    return () => window.clearInterval(timer)
+  }, [handleMapPosition, isDemo, navigationRoute, simulationStatus, useRealGps])
+
   const recenter = () => {
     const p = posRef.current
     if (p && mapRef.current) {
@@ -358,6 +553,46 @@ export default function Map() {
   const panToTreasure = (t: Treasure) => {
     mapRef.current?.panTo([t.lat, t.lng])
     userPannedRef.current = true
+  }
+
+  const beginMapPick = () => {
+    pickingDestinationRef.current = true
+    mapDraggedRef.current = false
+    setNavigationPhase('selecting')
+    setDestination(null)
+    setNavigationRoute(null)
+    setRouteStatus('idle')
+    setSheetState('collapsed')
+  }
+
+  const startNavigation = () => {
+    if (!navigationRoute) return
+    setNavigationPhase('navigating')
+    setRemainingM(navigationRoute.distanceM)
+    setCurrentStepIndex(0)
+  }
+
+  const startSimulation = () => {
+    if (!navigationRoute || useRealGps || !isDemo) return
+    setNavigationPhase('navigating')
+    simulationStatusRef.current = 'running'
+    setSimulationStatus('running')
+  }
+
+  const pauseSimulation = () => {
+    simulationStatusRef.current = 'paused'
+    setSimulationStatus('paused')
+  }
+
+  const resetSimulation = () => {
+    if (!navigationRoute || !routeOriginRef.current) return
+    simulationStatusRef.current = 'paused'
+    setSimulationStatus('paused')
+    setSimulationDistance(0)
+    setNavigationPhase('navigating')
+    setRemainingM(navigationRoute.distanceM)
+    setCurrentStepIndex(0)
+    handleMapPosition(routeOriginRef.current)
   }
 
   const goToAR = async () => {
@@ -479,6 +714,12 @@ export default function Map() {
         </button>
       </div>
 
+      {isDemo && (
+        <div style={{ ...S.demoBadge, top: campaignSlug ? 'calc(164px + env(safe-area-inset-top))' : 'calc(112px + env(safe-area-inset-top))' }}>
+          โหมดทดสอบ • {useRealGps ? 'GPS จริง' : 'GPS จำลอง กรุงเทพฯ'}
+        </div>
+      )}
+
       <button
         onClick={recenter}
         style={{
@@ -507,6 +748,53 @@ export default function Map() {
         demoLaunch={currentDemoLaunch}
         onOpenDemo={openDemo}
         portalBusy={portalBusy}
+        navigationOpen={navigationOpen}
+        onNavigateTo={(treasure) => chooseDestination({
+          id: `portal-${treasure.id}`,
+          name: treasure.name,
+          lat: treasure.lat,
+          lng: treasure.lng,
+          source: 'portal',
+        })}
+        toolbar={(
+          <div style={S.mapToolbar} aria-label="ตั้งค่าแผนที่">
+            <span style={S.toolbarLabel}>ธีม</span>
+            <button type="button" aria-pressed={theme === 'light'} onClick={() => setTheme('light')} style={{ ...S.toolbarButton, ...(theme === 'light' ? S.toolbarActive : {}) }}>Light</button>
+            <button type="button" aria-pressed={theme === 'dark'} onClick={() => setTheme('dark')} style={{ ...S.toolbarButton, ...(theme === 'dark' ? S.toolbarActive : {}) }}>Dark</button>
+          </div>
+        )}
+        weatherContent={(
+          <>
+            <WeatherStatus weather={weather} loading={weatherLoading} error={weatherError} />
+            {isDemo && <WeatherDemoControls />}
+          </>
+        )}
+        navigationContent={(
+          <NavigationPanel
+            open={navigationOpen}
+            phase={navigationPhase}
+            status={routeStatus}
+            destination={destination}
+            route={navigationRoute}
+            error={routeError}
+            travelMode={travelMode}
+            isDemo={isDemo}
+            useRealGps={useRealGps}
+            simulationStatus={simulationStatus}
+            remainingM={remainingM}
+            currentStepIndex={currentStepIndex}
+            onOpen={() => setNavigationOpen(true)}
+            onPickOnMap={beginMapPick}
+            onSelectDemo={() => chooseDestination(DEMO_DESTINATIONS[0])}
+            onCalculate={() => { void calculateNavigationRoute() }}
+            onStart={startNavigation}
+            onCancel={cancelNavigation}
+            onTravelModeChange={changeTravelMode}
+            onSimulationStart={startSimulation}
+            onSimulationPause={pauseSimulation}
+            onSimulationReset={resetSimulation}
+          />
+        )}
       />
 
       {geoError && (
@@ -633,6 +921,57 @@ const S: Record<string, React.CSSProperties> = {
   missionActive: {
     borderColor: 'var(--primary)',
     color: 'var(--text-primary)',
+  },
+  demoBadge: {
+    position: 'absolute',
+    left: 14,
+    zIndex: 800,
+    minHeight: 32,
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '5px 11px',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'var(--divider)',
+    borderRadius: 'var(--radius-full)',
+    background: 'var(--surface)',
+    color: 'var(--text-secondary)',
+    boxShadow: 'var(--shadow-sm)',
+    fontSize: 'var(--body4-size)',
+    fontWeight: 800,
+  },
+  mapToolbar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    margin: '2px 0 8px',
+    padding: 4,
+    borderRadius: 'var(--radius-md)',
+    background: 'var(--fill-subtle)',
+  },
+  toolbarLabel: {
+    margin: '0 6px',
+    color: 'var(--text-tertiary)',
+    fontSize: 'var(--body4-size)',
+    fontWeight: 700,
+  },
+  toolbarButton: {
+    minHeight: 38,
+    minWidth: 64,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'transparent',
+    borderRadius: 'var(--radius-sm)',
+    background: 'transparent',
+    color: 'var(--text-secondary)',
+    fontSize: 'var(--body2-size)',
+    fontWeight: 700,
+  },
+  toolbarActive: {
+    borderColor: 'var(--divider)',
+    background: 'var(--surface)',
+    color: 'var(--primary)',
+    boxShadow: 'var(--shadow-sm)',
   },
   recenterBtn: {
     position: 'absolute',

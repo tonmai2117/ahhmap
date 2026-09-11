@@ -30,6 +30,11 @@ export function MapBottomSheet({
   demoLaunch,
   onOpenDemo,
   portalBusy,
+  toolbar,
+  weatherContent,
+  navigationContent,
+  navigationOpen,
+  onNavigateTo,
 }: {
   state: 'expanded' | 'collapsed'
   onStateChange: (state: 'expanded' | 'collapsed') => void
@@ -47,6 +52,11 @@ export function MapBottomSheet({
   demoLaunch: DemoLaunch | null
   onOpenDemo: (url: string) => void
   portalBusy: boolean
+  toolbar?: React.ReactNode
+  weatherContent?: React.ReactNode
+  navigationContent?: React.ReactNode
+  navigationOpen?: boolean
+  onNavigateTo?: (treasure: Treasure) => void
 }) {
   const sheetRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ startY: number; offset: number; collapsedOffset: number } | null>(null)
@@ -123,7 +133,10 @@ export function MapBottomSheet({
         </div>
       </div>
 
-      <div style={S.portalList}>
+      {toolbar}
+      {weatherContent}
+
+      {navigationOpen ? navigationContent : <div style={S.portalList}>
         {treasures.slice(0, 5).map((t, index) => {
           const tier = getTier(t)
           const color = mode === 'event' ? EVENT_COLORS[index % EVENT_COLORS.length] : TIER_COLORS[tier]
@@ -131,15 +144,15 @@ export function MapBottomSheet({
           const isSelectable = inRangeTreasures.some((r) => r.id === t.id)
           const isSelected = isSelectable && t.id === selectedPortalId
           return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => {
-                onPanTo(t)
-                if (isSelectable) onSelectPortal(t)
-              }}
-              style={{ ...S.portalRow, ...(isSelected ? S.portalRowSelected : {}) }}
-            >
+            <div key={t.id} style={{ ...S.portalRow, ...(isSelected ? S.portalRowSelected : {}) }}>
+              <button
+                type="button"
+                onClick={() => {
+                  onPanTo(t)
+                  if (isSelectable) onSelectPortal(t)
+                }}
+                style={S.portalMain}
+              >
               <span style={{ ...S.portalIcon, background: `${color}1a`, color }}>
                 <Icon name="star" size={20} />
               </span>
@@ -160,12 +173,16 @@ export function MapBottomSheet({
               >
                 {mode === 'event' ? `จุดที่ ${index + 1}` : TIER_LABELS[tier]}
               </span>
-            </button>
+              </button>
+              {onNavigateTo && <button type="button" style={S.navigateButton} onClick={() => onNavigateTo(t)}>นำทาง</button>}
+            </div>
           )
         })}
-      </div>
+      </div>}
 
-      {demoLaunch ? (
+      {!navigationOpen && navigationContent}
+
+      {!navigationOpen && (demoLaunch ? (
         <>
           <p style={S.demoStatus}>
             {demoLaunch.claim === 'earned' ? 'บันทึกรางวัลแล้ว' : 'เก็บ portal นี้แล้ววันนี้'}
@@ -185,7 +202,7 @@ export function MapBottomSheet({
             'เข้าใกล้ Portal เพื่อเริ่มเกม'
           )}
         </Button>
-      )}
+      ))}
     </div>
   )
 }
@@ -250,8 +267,30 @@ const S: Record<string, React.CSSProperties> = {
     border: '2px solid transparent',
     borderRadius: 'var(--radius-md)',
     background: 'transparent',
-    padding: '8px',
+    padding: '4px',
     textAlign: 'left',
+  },
+  portalMain: {
+    minWidth: 0,
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    border: 0,
+    background: 'transparent',
+    padding: 4,
+    textAlign: 'left',
+  },
+  navigateButton: {
+    minHeight: 40,
+    flexShrink: 0,
+    border: '1px solid var(--divider)',
+    borderRadius: 'var(--radius-full)',
+    background: 'var(--fill-subtle)',
+    color: 'var(--primary)',
+    padding: '0 10px',
+    fontSize: 'var(--body4-size)',
+    fontWeight: 800,
   },
   portalRowSelected: {
     border: '2px solid var(--primary)',
@@ -282,7 +321,8 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: 'var(--body4-size)',
   },
   portalBadge: {
-    border: '1px solid',
+    borderWidth: 1,
+    borderStyle: 'solid',
     borderRadius: 'var(--radius-full)',
     fontSize: 11,
     fontWeight: 800,

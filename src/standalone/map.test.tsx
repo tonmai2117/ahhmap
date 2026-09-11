@@ -3,6 +3,31 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import { api } from '../api'
+import L from 'leaflet'
+
+vi.mock('../weather/weatherClient.js', () => ({
+  fetchWeather: vi.fn().mockResolvedValue({
+    ok: true,
+    data: {
+      source: 'demo',
+      areaKey: '13.74,100.52',
+      lat: 13.7466,
+      lon: 100.5285,
+      observedAt: Date.now(),
+      fetchedAt: Date.now(),
+      conditionIds: [800],
+      kind: 'clear',
+      label: 'ท้องฟ้าโปร่ง',
+      cloudPercent: 0,
+      rainMmPerHour: null,
+      isDay: true,
+      stale: false,
+    },
+  }),
+  resetWeatherClientCache: vi.fn(),
+}))
+
+const originalSvgSupport = L.Browser.svg
 
 class ResizeObserverStub {
   observe() {}
@@ -15,6 +40,8 @@ function LocationProbe() {
 }
 
 beforeEach(() => {
+  // jsdom has SVG elements but omits Leaflet's browser capability probe.
+  Object.defineProperty(L.Browser, 'svg', { configurable: true, writable: true, value: true })
   vi.stubGlobal('ResizeObserver', ResizeObserverStub)
   vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('Unexpected backend request'))))
   Object.defineProperty(navigator, 'geolocation', {
@@ -25,6 +52,8 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  Object.defineProperty(L.Browser, 'svg', { configurable: true, writable: true, value: originalSvgSupport })
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -34,6 +63,8 @@ describe('standalone map', () => {
     await waitFor(() => expect(screen.getByText('ผู้เล่น')).toBeTruthy())
     expect(container.querySelector('.leaflet-container')).toBeTruthy()
     expect(container.querySelector('.leaflet-tile-pane')).toBeTruthy()
+    expect(container.querySelector('.leaflet-marker-icon')).toBeTruthy()
+    expect(navigator.geolocation.watchPosition).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'เข้าใกล้ Portal เพื่อเริ่มเกม' }).hasAttribute('disabled')).toBe(true)
     expect(screen.queryByText('เพิ่มเพื่อน LINE Official Account')).toBeNull()
     expect(fetch).not.toHaveBeenCalled()

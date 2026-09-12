@@ -148,7 +148,7 @@ export default function Map() {
     const rainPane = map.createPane('aahh-rain-radar')
     rainPane.style.zIndex = '240'
     rainPane.style.pointerEvents = 'none'
-    rainRadarLayerRef.current = L.tileLayer('/api/weather-tiles/{z}/{x}/{y}', {
+    rainRadarLayerRef.current = L.tileLayer('/api/weather-tile?z={z}&x={x}&y={y}', {
       pane: 'aahh-rain-radar',
       opacity: 0.58,
       maxZoom: 18,

@@ -31,13 +31,18 @@ export function createWeatherTileHandler(options: WeatherTileMiddlewareOptions =
   async function handleRequest(reqUrl: string, method: string): Promise<WeatherTileResult> {
     if (method !== 'GET') return jsonError(405, 'METHOD_NOT_ALLOWED');
 
-    const pathname = new URL(reqUrl, 'http://localhost').pathname;
-    const match = TILE_PATH.exec(pathname);
-    if (!match) return jsonError(400, 'BAD_TILE_COORDINATES');
+    const url = new URL(reqUrl, 'http://localhost');
+    const match = TILE_PATH.exec(url.pathname);
+    const rawZ = url.pathname === '/api/weather-tile' ? url.searchParams.get('z') : match?.[1];
+    const rawX = url.pathname === '/api/weather-tile' ? url.searchParams.get('x') : match?.[2];
+    const rawY = url.pathname === '/api/weather-tile' ? url.searchParams.get('y') : match?.[3];
+    if (rawZ === null || rawX === null || rawY === null || rawZ === undefined || rawX === undefined || rawY === undefined) {
+      return jsonError(400, 'BAD_TILE_COORDINATES');
+    }
 
-    const z = Number(match[1]);
-    const x = Number(match[2]);
-    const y = Number(match[3]);
+    const z = Number(rawZ);
+    const x = Number(rawX);
+    const y = Number(rawY);
     const tileCount = 2 ** z;
     if (
       !Number.isInteger(z) || !Number.isInteger(x) || !Number.isInteger(y) ||
@@ -79,7 +84,7 @@ export function createWeatherTileMiddleware(options: WeatherTileMiddlewareOption
 
   return function weatherTileMiddleware(req: IncomingMessage, res: ServerResponse, next?: () => void) {
     const pathname = new URL(req.url || '', 'http://localhost').pathname;
-    if (!pathname.startsWith('/api/weather-tiles/')) {
+    if (pathname !== '/api/weather-tile' && !pathname.startsWith('/api/weather-tiles/')) {
       next?.();
       return;
     }

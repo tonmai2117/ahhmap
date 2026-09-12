@@ -16,7 +16,7 @@ describe('weather precipitation tile proxy', () => {
     });
     const handler = createWeatherTileHandler({ apiKey: fakeApiKey, fetchImpl: mockFetch });
 
-    const result = await handler.handleRequest('/api/weather-tiles/10/799/471', 'GET');
+    const result = await handler.handleRequest('/api/weather-tile?z=10&x=799&y=471', 'GET');
 
     expect(result.status).toBe(200);
     expect(result.headers['Content-Type']).toBe('image/png');
@@ -32,7 +32,7 @@ describe('weather precipitation tile proxy', () => {
     const mockFetch = vi.fn();
     const handler = createWeatherTileHandler({ apiKey: fakeApiKey, fetchImpl: mockFetch });
 
-    const result = await handler.handleRequest('/api/weather-tiles/10/1024/0', 'GET');
+    const result = await handler.handleRequest('/api/weather-tile?z=10&x=1024&y=0', 'GET');
 
     expect(result.status).toBe(400);
     expect(mockFetch).not.toHaveBeenCalled();
@@ -40,11 +40,11 @@ describe('weather precipitation tile proxy', () => {
 
   it('requires server-side configuration and forwards safe auth errors', async () => {
     const noKey = createWeatherTileHandler({ apiKey: '', fetchImpl: vi.fn() });
-    expect((await noKey.handleRequest('/api/weather-tiles/1/1/1', 'GET')).status).toBe(503);
+    expect((await noKey.handleRequest('/api/weather-tile?z=1&x=1&y=1', 'GET')).status).toBe(503);
 
     const authFetch = vi.fn().mockResolvedValue({ ok: false, status: 401 });
     const auth = createWeatherTileHandler({ apiKey: fakeApiKey, fetchImpl: authFetch });
-    const result = await auth.handleRequest('/api/weather-tiles/1/1/1', 'GET');
+    const result = await auth.handleRequest('/api/weather-tile?z=1&x=1&y=1', 'GET');
     expect(result.status).toBe(401);
     expect(result.body).toBe(JSON.stringify({ ok: false, code: 'WEATHER_AUTH' }));
   });

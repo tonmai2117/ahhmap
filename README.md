@@ -68,6 +68,6 @@ and a live OpenWeather precipitation tile overlay covering the visible map acros
 - **API Key Configuration**: Put `OPENWEATHER_API_KEY=your_key_here` in `.env.local`. Never commit or expose this key to client bundles.
 - **Local Dev & Preview**: Handled via Vite local server middleware (`/api/weather`) so the API key remains server-side only.
 - **Vercel Serverless Function**: Production deployment on Vercel automatically uses `/api/weather.ts` as a Node serverless API function, securely reading `process.env.OPENWEATHER_API_KEY`.
-- **Bangkok Rain Radar**: `/api/weather-tiles/{z}/{x}/{y}` proxies OpenWeather's `precipitation_new` map tiles so rainfall is visible across the whole map without exposing the API key to the browser.
+- **Bangkok Rain Radar**: `/api/weather-tile?z={z}&x={x}&y={y}` proxies OpenWeather's `precipitation_new` map tiles so rainfall is visible across the whole map without exposing the API key to the browser.
 - **Demo Fixtures**: Open `/map?demo=1` to test weather conditions (`clear`, `cloudy`, `light-rain`, `heavy-rain`, `thunderstorm`, `stale`, `error`) without issuing upstream API requests.
 

@@ -32,7 +32,11 @@ beforeEach(() => {
   fetchRouteMock.mockReset().mockResolvedValue(routeResult)
   Object.defineProperty(L.Browser, 'svg', { configurable: true, writable: true, value: true })
   vi.stubGlobal('ResizeObserver', ResizeObserverStub)
-  Object.defineProperty(navigator, 'geolocation', { configurable: true, value: { watchPosition: vi.fn(() => 1), clearWatch: vi.fn() } })
+  const watchPosition = vi.fn((success: PositionCallback) => {
+    success({ coords: { latitude: 13.7466, longitude: 100.5285, accuracy: 10 } } as GeolocationPosition)
+    return 1
+  })
+  Object.defineProperty(navigator, 'geolocation', { configurable: true, value: { watchPosition, clearWatch: vi.fn() } })
 })
 
 afterEach(() => {

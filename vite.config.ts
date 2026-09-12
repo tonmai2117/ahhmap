@@ -1,19 +1,27 @@
 import { defineConfig, loadEnv, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { createWeatherMiddleware } from './server/weatherMiddleware.js';
+import { createWeatherTileMiddleware } from './server/weatherTileMiddleware.js';
 
 function weatherServerPlugin(apiKey: string): Plugin {
   const middleware = createWeatherMiddleware({ apiKey });
+  const tileMiddleware = createWeatherTileMiddleware({ apiKey });
   return {
     name: 'weather-server-plugin',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         middleware(req, res, next);
       });
+      server.middlewares.use((req, res, next) => {
+        tileMiddleware(req, res, next);
+      });
     },
     configurePreviewServer(server) {
       server.middlewares.use((req, res, next) => {
         middleware(req, res, next);
+      });
+      server.middlewares.use((req, res, next) => {
+        tileMiddleware(req, res, next);
       });
     },
   };

@@ -32,14 +32,11 @@ coin balance (`—`), and an empty portal list. No rewards or accounts are creat
 intentional; connect verified portal data and a backend if needed. AR gameplay
 and reward collection are not part of this map-only app.
 
-Map tiles need internet access. For testing, GPS defaults to a fixed simulated
-position in Bangkok (13.7466, 100.5285) with 10 m accuracy. The original player
-marker, recenter control, distances, and portal proximity all use this position;
-no device location permission is needed. This does not change the device GPS.
-
-Open `/map?gps=real` to use the device's real location, then allow browser location
-permission. Reload after changing this parameter. Real GPS retains the original
-location error handling if it is unavailable.
+Map tiles need internet access. The map always requests the device's real location
+and continuously tracks it with the browser Geolocation API. Allow location access
+when prompted. High-accuracy tracking updates the player marker, accuracy circle,
+distances, portal proximity, navigation progress, and route recalculation. There is
+no simulated-location fallback; a clear error is shown if GPS is unavailable.
 
 ## Theme and navigation
 
@@ -51,10 +48,9 @@ therefore need internet access, have no availability guarantee, and may throttle
 heavy traffic. No API key is stored in this project.
 
 Open `/map?demo=1` for the complete local test flow. Choose **นำทางไป...**, select
-**จุดทดสอบ A (กรุงเทพฯ)**, calculate the route, start navigation, and then start,
-pause, or reset the roughly 30-second simulated walk. Open
-`/map?demo=1&gps=real` to keep the demo destination while using device GPS; route
-simulation is disabled in that mode.
+**จุดทดสอบ A (กรุงเทพฯ)**, calculate the route, and start navigation.
+Demo mode exposes test destinations and weather fixtures only; location always
+comes from real-time device GPS and route simulation is disabled.
 
 CARTO supplies the Light and Dark map imagery. A CARTO key/API watermark can
 appear on public tiles; it is part of that tile service and is intentionally not
@@ -66,10 +62,12 @@ registration-query behavior.
 
 ## OpenWeather & Weather Cloud Animations
 
-The map includes local weather information and SVG animated cloud markers near the player position.
+The map includes local weather information, SVG animated cloud markers near the player position,
+and a live OpenWeather precipitation tile overlay covering the visible map across Bangkok.
 
 - **API Key Configuration**: Put `OPENWEATHER_API_KEY=your_key_here` in `.env.local`. Never commit or expose this key to client bundles.
 - **Local Dev & Preview**: Handled via Vite local server middleware (`/api/weather`) so the API key remains server-side only.
 - **Vercel Serverless Function**: Production deployment on Vercel automatically uses `/api/weather.ts` as a Node serverless API function, securely reading `process.env.OPENWEATHER_API_KEY`.
+- **Bangkok Rain Radar**: `/api/weather-tiles/{z}/{x}/{y}` proxies OpenWeather's `precipitation_new` map tiles so rainfall is visible across the whole map without exposing the API key to the browser.
 - **Demo Fixtures**: Open `/map?demo=1` to test weather conditions (`clear`, `cloudy`, `light-rain`, `heavy-rain`, `thunderstorm`, `stale`, `error`) without issuing upstream API requests.
 

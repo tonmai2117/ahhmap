@@ -44,9 +44,13 @@ beforeEach(() => {
   Object.defineProperty(L.Browser, 'svg', { configurable: true, writable: true, value: true })
   vi.stubGlobal('ResizeObserver', ResizeObserverStub)
   vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('Unexpected backend request'))))
+  const watchPosition = vi.fn((success: PositionCallback) => {
+    success({ coords: { latitude: 13.7466, longitude: 100.5285, accuracy: 8 } } as GeolocationPosition)
+    return 1
+  })
   Object.defineProperty(navigator, 'geolocation', {
     configurable: true,
-    value: { watchPosition: vi.fn(() => 1), clearWatch: vi.fn() },
+    value: { watchPosition, clearWatch: vi.fn() },
   })
 })
 
@@ -64,7 +68,8 @@ describe('standalone map', () => {
     expect(container.querySelector('.leaflet-container')).toBeTruthy()
     expect(container.querySelector('.leaflet-tile-pane')).toBeTruthy()
     expect(container.querySelector('.leaflet-marker-icon')).toBeTruthy()
-    expect(navigator.geolocation.watchPosition).not.toHaveBeenCalled()
+    expect(navigator.geolocation.watchPosition).toHaveBeenCalledOnce()
+    expect(screen.getByRole('button', { name: 'ดูเรดาร์ทั่วกรุงเทพ' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'เข้าใกล้ Portal เพื่อเริ่มเกม' }).hasAttribute('disabled')).toBe(true)
     expect(screen.queryByText('เพิ่มเพื่อน LINE Official Account')).toBeNull()
     expect(fetch).not.toHaveBeenCalled()

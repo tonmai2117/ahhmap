@@ -27,7 +27,7 @@ import {
   type MapMode,
   type MapPosition,
 } from '../map/mapDomain'
-import { pointAlongRoute, routeProgress, type Destination, type FetchStatus, type NavigationPhase, type RouteResult, type SimulationStatus, type TravelMode } from '../map/navigationDomain'
+import { routeProgress, type Destination, type FetchStatus, type NavigationPhase, type RouteResult, type TravelMode } from '../map/navigationDomain'
 import { fetchRoute, routingErrorMessage } from '../map/routingClient'
 import type { Treasure } from '../types'
 import { userFacingError } from '../utils/errors'
@@ -73,7 +73,6 @@ export default function Map() {
   const campaignSlug = searchParams.get('campaign')
   const hostSlug = searchParams.get('host')
   const isDemo = searchParams.get('demo') === '1'
-  const useRealGps = searchParams.get('gps') === 'real'
 
   const [balance, setBalance] = useState<number | null>(null)
   const [playerName, setPlayerName] = useState('ผู้เล่น')
@@ -98,8 +97,6 @@ export default function Map() {
   const [eventRoute, setEventRoute] = useState<RouteResult | null>(null)
   const [remainingM, setRemainingM] = useState<number | null>(null)
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
-  const [simulationStatus, setSimulationStatus] = useState<SimulationStatus>('idle')
-  const [, setSimulationDistance] = useState(0)
 
   const weatherQueryParam = searchParams.get('weather')
   const { weather, loading: weatherLoading, error: weatherError } = useWeather(displayPos, weatherQueryParam, isDemo)
@@ -123,6 +120,7 @@ export default function Map() {
   const accuracyCircRef = useRef<L.Circle | null>(null)
   const treasureLayerRef = useRef<L.LayerGroup | null>(null)
   const tileLayerRef = useRef<L.TileLayer | null>(null)
+  const rainRadarLayerRef = useRef<L.TileLayer | null>(null)
   const routeLayersRef = useRef<L.Polyline[]>([])
   const destinationMarkerRef = useRef<L.Marker | null>(null)
   const userPannedRef = useRef(false)
@@ -135,19 +133,27 @@ export default function Map() {
   const pickingDestinationRef = useRef(false)
   const mapDraggedRef = useRef(false)
   const sourcePositionRef = useRef<MapPosition | null>(null)
-  const simulationStatusRef = useRef<SimulationStatus>('idle')
   const lastRerouteAtRef = useRef(0)
 
   const posRef = useRef<MapPosition | null>(null)
   const treasuresRef = useRef<Treasure[]>([])
   treasuresRef.current = treasures
-  simulationStatusRef.current = simulationStatus
 
   useEffect(() => {
     if (!mapDivRef.current || mapRef.current) return
 
     const map = L.map(mapDivRef.current, { zoomControl: false }).setView(PLAYER_MAP_CENTER, 17)
     tileLayerRef.current = L.tileLayer(theme === 'dark' ? CARTO_DARK_TILE_URL : CARTO_VOYAGER_TILE_URL, CARTO_TILE_OPTIONS).addTo(map)
+
+    const rainPane = map.createPane('aahh-rain-radar')
+    rainPane.style.zIndex = '240'
+    rainPane.style.pointerEvents = 'none'
+    rainRadarLayerRef.current = L.tileLayer('/api/weather-tiles/{z}/{x}/{y}', {
+      pane: 'aahh-rain-radar',
+      opacity: 0.58,
+      maxZoom: 18,
+      attribution: 'Rain radar &copy; OpenWeather',
+    }).addTo(map)
 
     const layer = L.layerGroup().addTo(map)
     treasureLayerRef.current = layer
@@ -186,6 +192,7 @@ export default function Map() {
       playerMarkerRef.current = null
       accuracyCircRef.current = null
       tileLayerRef.current = null
+      rainRadarLayerRef.current = null
       routeLayersRef.current = []
       destinationMarkerRef.current = null
     }
@@ -340,12 +347,12 @@ export default function Map() {
 
   const handleSourcePosition = useCallback((p: MapPosition) => {
     sourcePositionRef.current = p
-    if (simulationStatusRef.current === 'idle') handleMapPosition(p)
+    handleMapPosition(p)
   }, [handleMapPosition])
 
   useGeolocation({
     watch: true,
-    options: { enableHighAccuracy: true, maximumAge: 3_000 },
+    options: { enableHighAccuracy: true, maximumAge: 3_000, timeout: 15_000 },
     onPosition: handleSourcePosition,
     onError: () => setGeoError(true),
   })
@@ -426,9 +433,6 @@ export default function Map() {
     setRouteStatus('idle')
     setRouteError('')
     setNavigationPhase('preview')
-    simulationStatusRef.current = 'idle'
-    setSimulationStatus('idle')
-    setSimulationDistance(0)
     setRemainingM(null)
     setCurrentStepIndex(0)
     setSheetState('expanded')
@@ -445,9 +449,6 @@ export default function Map() {
     setRouteStatus('loading')
     setRouteError('')
     setNavigationRoute(null)
-    simulationStatusRef.current = 'idle'
-    setSimulationStatus('idle')
-    setSimulationDistance(0)
     routeOriginRef.current = { ...origin }
     try {
       const result = await fetchRoute([origin, destination], mode, controller.signal)
@@ -467,19 +468,16 @@ export default function Map() {
   }, [destination, sheetHeight, travelMode])
 
   useEffect(() => {
-    if (!useRealGps || navigationPhase !== 'navigating' || routeStatus !== 'ready' || !displayPos || !routeOriginRef.current) return
+    if (navigationPhase !== 'navigating' || routeStatus !== 'ready' || !displayPos || !routeOriginRef.current) return
     const now = Date.now()
     if (haversine(routeOriginRef.current.lat, routeOriginRef.current.lng, displayPos.lat, displayPos.lng) < 30) return
     if (now - lastRerouteAtRef.current < 15_000) return
     lastRerouteAtRef.current = now
     void calculateNavigationRoute(travelMode, true)
-  }, [calculateNavigationRoute, displayPos, navigationPhase, routeStatus, travelMode, useRealGps])
+  }, [calculateNavigationRoute, displayPos, navigationPhase, routeStatus, travelMode])
 
   const changeTravelMode = useCallback((mode: TravelMode) => {
     setTravelMode(mode)
-    simulationStatusRef.current = 'idle'
-    setSimulationStatus('idle')
-    setSimulationDistance(0)
     if (navigationRoute && destination) void calculateNavigationRoute(mode)
   }, [calculateNavigationRoute, destination, navigationRoute])
 
@@ -493,9 +491,6 @@ export default function Map() {
     setRouteError('')
     setDestination(null)
     setNavigationRoute(null)
-    simulationStatusRef.current = 'idle'
-    setSimulationStatus('idle')
-    setSimulationDistance(0)
     setRemainingM(null)
     setCurrentStepIndex(0)
     const source = sourcePositionRef.current
@@ -516,31 +511,10 @@ export default function Map() {
     const endpoint = navigationRoute.geometry[navigationRoute.geometry.length - 1]
     if (endpoint && progress.ratio >= 0.9 && haversine(displayPos.lat, displayPos.lng, endpoint[1], endpoint[0]) <= 25) {
       setNavigationPhase('arrived')
-      simulationStatusRef.current = 'idle'
-      setSimulationStatus('idle')
       setRemainingM(0)
       setCurrentStepIndex(Math.max(0, navigationRoute.steps.length - 1))
     }
   }, [displayPos, navigationPhase, navigationRoute])
-
-  useEffect(() => {
-    if (simulationStatus !== 'running' || !navigationRoute || useRealGps || !isDemo) return
-    const increment = navigationRoute.distanceM / 60
-    const timer = window.setInterval(() => {
-      setSimulationDistance((current) => {
-        const next = Math.min(navigationRoute.distanceM, current + increment)
-        const point = pointAlongRoute(navigationRoute.geometry, next)
-        if (next >= navigationRoute.distanceM) displayPosRef.current = null
-        if (point) handleMapPosition(point)
-        if (next >= navigationRoute.distanceM) {
-          simulationStatusRef.current = 'idle'
-          setSimulationStatus('idle')
-        }
-        return next
-      })
-    }, 500)
-    return () => window.clearInterval(timer)
-  }, [handleMapPosition, isDemo, navigationRoute, simulationStatus, useRealGps])
 
   const recenter = () => {
     const p = posRef.current
@@ -548,6 +522,15 @@ export default function Map() {
       mapRef.current.panTo([p.lat, p.lng])
       userPannedRef.current = false
     }
+  }
+
+  const showBangkokRainRadar = () => {
+    mapRef.current?.fitBounds(
+      [[13.45, 100.25], [14.05, 100.95]],
+      { padding: [18, 18] },
+    )
+    userPannedRef.current = true
+    setSheetState('collapsed')
   }
 
   const panToTreasure = (t: Treasure) => {
@@ -570,29 +553,6 @@ export default function Map() {
     setNavigationPhase('navigating')
     setRemainingM(navigationRoute.distanceM)
     setCurrentStepIndex(0)
-  }
-
-  const startSimulation = () => {
-    if (!navigationRoute || useRealGps || !isDemo) return
-    setNavigationPhase('navigating')
-    simulationStatusRef.current = 'running'
-    setSimulationStatus('running')
-  }
-
-  const pauseSimulation = () => {
-    simulationStatusRef.current = 'paused'
-    setSimulationStatus('paused')
-  }
-
-  const resetSimulation = () => {
-    if (!navigationRoute || !routeOriginRef.current) return
-    simulationStatusRef.current = 'paused'
-    setSimulationStatus('paused')
-    setSimulationDistance(0)
-    setNavigationPhase('navigating')
-    setRemainingM(navigationRoute.distanceM)
-    setCurrentStepIndex(0)
-    handleMapPosition(routeOriginRef.current)
   }
 
   const goToAR = async () => {
@@ -716,7 +676,7 @@ export default function Map() {
 
       {isDemo && (
         <div style={{ ...S.demoBadge, top: campaignSlug ? 'calc(164px + env(safe-area-inset-top))' : 'calc(112px + env(safe-area-inset-top))' }}>
-          โหมดทดสอบ • {useRealGps ? 'GPS จริง' : 'GPS จำลอง กรุงเทพฯ'}
+          โหมดทดสอบ • GPS เรียลไทม์
         </div>
       )}
 
@@ -766,6 +726,12 @@ export default function Map() {
         weatherContent={(
           <>
             <WeatherStatus weather={weather} loading={weatherLoading} error={weatherError} />
+            <div style={S.rainRadarRow}>
+              <p style={S.rainRadarStatus}>เรดาร์ฝนสด • ครอบคลุมทุกพื้นที่ทั่วกรุงเทพ</p>
+              <button type="button" onClick={showBangkokRainRadar} style={S.rainRadarButton}>
+                ดูเรดาร์ทั่วกรุงเทพ
+              </button>
+            </div>
             {isDemo && <WeatherDemoControls />}
           </>
         )}
@@ -779,8 +745,6 @@ export default function Map() {
             error={routeError}
             travelMode={travelMode}
             isDemo={isDemo}
-            useRealGps={useRealGps}
-            simulationStatus={simulationStatus}
             remainingM={remainingM}
             currentStepIndex={currentStepIndex}
             onOpen={() => setNavigationOpen(true)}
@@ -790,9 +754,6 @@ export default function Map() {
             onStart={startNavigation}
             onCancel={cancelNavigation}
             onTravelModeChange={changeTravelMode}
-            onSimulationStart={startSimulation}
-            onSimulationPause={pauseSimulation}
-            onSimulationReset={resetSimulation}
           />
         )}
       />
@@ -948,6 +909,29 @@ const S: Record<string, React.CSSProperties> = {
     padding: 4,
     borderRadius: 'var(--radius-md)',
     background: 'var(--fill-subtle)',
+  },
+  rainRadarRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    margin: '-4px 0 10px',
+  },
+  rainRadarStatus: {
+    color: 'var(--text-tertiary)',
+    fontSize: 11,
+    lineHeight: 1.4,
+  },
+  rainRadarButton: {
+    flexShrink: 0,
+    minHeight: 30,
+    padding: '5px 9px',
+    border: '1px solid var(--divider)',
+    borderRadius: 'var(--radius-sm)',
+    background: 'var(--surface)',
+    color: 'var(--primary)',
+    fontSize: 11,
+    fontWeight: 700,
   },
   toolbarLabel: {
     margin: '0 6px',

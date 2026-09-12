@@ -9,27 +9,40 @@ afterEach(() => {
   window.history.replaceState(null, '', '/')
 })
 
-describe('Bangkok test GPS', () => {
-  it('reports a Bangkok position even when device geolocation is unavailable', () => {
+describe('real-time device GPS', () => {
+  it('reports an error without inventing a fallback position when geolocation is unavailable', () => {
     Object.defineProperty(navigator, 'geolocation', { configurable: true, value: undefined })
     const onPosition = vi.fn()
     const onError = vi.fn()
     renderHook(() => useGeolocation({ watch: true, onPosition, onError }))
-    expect(onPosition).toHaveBeenCalledWith({ lat: 13.7466, lng: 100.5285, accuracy: 10 })
-    expect(onError).not.toHaveBeenCalled()
+    expect(onPosition).not.toHaveBeenCalled()
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'geolocation_unavailable' }))
   })
 
-  it('keeps device GPS and watch cleanup available through ?gps=real', () => {
-    window.history.replaceState(null, '', '/map?gps=real')
-    const watchPosition = vi.fn(() => 7)
+  it('streams device positions by default and clears the watcher on unmount', () => {
+    const watchPosition = vi.fn((success: PositionCallback) => {
+      success({
+        coords: { latitude: 13.72, longitude: 100.51, accuracy: 6 },
+      } as GeolocationPosition)
+      return 7
+    })
     const clearWatch = vi.fn()
     Object.defineProperty(navigator, 'geolocation', {
       configurable: true, value: { watchPosition, clearWatch },
     })
     const onPosition = vi.fn()
-    const { unmount } = renderHook(() => useGeolocation({ watch: true, onPosition }))
+    const { unmount } = renderHook(() => useGeolocation({
+      watch: true,
+      options: { enableHighAccuracy: true, maximumAge: 3_000, timeout: 15_000 },
+      onPosition,
+    }))
     expect(watchPosition).toHaveBeenCalledOnce()
-    expect(onPosition).not.toHaveBeenCalled()
+    expect(watchPosition).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.any(Function),
+      { enableHighAccuracy: true, maximumAge: 3_000, timeout: 15_000 },
+    )
+    expect(onPosition).toHaveBeenCalledWith({ lat: 13.72, lng: 100.51, accuracy: 6 })
     unmount()
     expect(clearWatch).toHaveBeenCalledWith(7)
   })

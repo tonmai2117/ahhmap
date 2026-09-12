@@ -1,5 +1,5 @@
 import { Button } from './ui'
-import { formatDistance, formatDuration, type Destination, type FetchStatus, type NavigationPhase, type RouteResult, type SimulationStatus, type TravelMode } from '../map/navigationDomain'
+import { formatDistance, formatDuration, type Destination, type FetchStatus, type NavigationPhase, type RouteResult, type TravelMode } from '../map/navigationDomain'
 
 type Props = {
   open: boolean
@@ -10,8 +10,6 @@ type Props = {
   error: string
   travelMode: TravelMode
   isDemo: boolean
-  useRealGps: boolean
-  simulationStatus: SimulationStatus
   remainingM: number | null
   currentStepIndex: number
   onOpen: () => void
@@ -21,9 +19,6 @@ type Props = {
   onStart: () => void
   onCancel: () => void
   onTravelModeChange: (mode: TravelMode) => void
-  onSimulationStart: () => void
-  onSimulationPause: () => void
-  onSimulationReset: () => void
 }
 
 function SegmentButton({ active, children, onClick }: { active: boolean; children: React.ReactNode; onClick: () => void }) {
@@ -51,7 +46,7 @@ export function NavigationPanel(props: Props) {
       <div style={S.panelHeader}>
         <div>
           <p style={S.title}>{props.phase === 'arrived' ? 'ถึงปลายทางแล้ว' : 'นำทางไปที่ไหน'}</p>
-          <p style={S.sub}>{props.useRealGps ? 'ตำแหน่ง GPS ของอุปกรณ์' : 'GPS จำลอง กรุงเทพฯ'}</p>
+          <p style={S.sub}>ติดตามตำแหน่ง GPS แบบเรียลไทม์</p>
         </div>
         <button type="button" onClick={props.onCancel} aria-label="ปิดการนำทาง" style={S.close}>×</button>
       </div>
@@ -127,23 +122,6 @@ export function NavigationPanel(props: Props) {
             ))}
           </ol>
 
-          {props.isDemo && (
-            <div style={S.simulation}>
-              <p style={S.simTitle}>จำลองการเดินทางประมาณ 30 วินาที</p>
-              {props.useRealGps ? (
-                <p style={S.notice}>ใช้ GPS จริงอยู่ จึงปิดการจำลอง</p>
-              ) : (
-                <div style={S.simButtons}>
-                  {props.simulationStatus === 'running' ? (
-                    <Button variant="outline" onClick={props.onSimulationPause}>พัก</Button>
-                  ) : (
-                    <Button variant="outline" onClick={props.onSimulationStart}>เริ่มจำลอง</Button>
-                  )}
-                  <Button variant="ghost" onClick={props.onSimulationReset}>รีเซ็ต</Button>
-                </div>
-              )}
-            </div>
-          )}
         </>
       )}
     </section>
@@ -174,7 +152,4 @@ const S: Record<string, React.CSSProperties> = {
   step: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)', fontSize: 'var(--body3-size)' },
   stepActive: { background: 'var(--fill-subtle)', color: 'var(--text-primary)' },
   stepNumber: { width: 22, height: 22, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: 'var(--fill)', color: 'var(--text-secondary)', fontSize: 11, fontWeight: 800 },
-  simulation: { display: 'grid', gap: 7, paddingTop: 2 },
-  simTitle: { color: 'var(--text-secondary)', fontSize: 'var(--body4-size)', fontWeight: 700 },
-  simButtons: { display: 'flex', gap: 8 },
 }

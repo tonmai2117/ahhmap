@@ -13,6 +13,9 @@ The map uses MapLibre GL with OpenFreeMap vector tiles and a restrained 3D build
 layer. Bangkok coverage depends on the source tile data; replace the style URL with a
 licensed provider when production imagery or higher-detail 3D tiles are required.
 
+During a focused artwork view, the map markers recede so the calibrated facade image
+is the visual focus while the detail panel is open.
+
 Selecting a published artwork flies the camera to its configured viewing position,
 then places the artwork image on the facade as a presentation overlay before opening
 the detail panel. The two Song Wat murals include calibrated starter values in

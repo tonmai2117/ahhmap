@@ -7,6 +7,8 @@ import '../artMap/artMap.css'
 
 const SONG_WAT: [number, number] = [100.509, 13.7372]
 
+type MapCamera = { center: [number, number]; zoom: number; pitch: number; bearing: number }
+
 function markerElement(artwork: Artwork, selected: boolean) {
   const element = document.createElement('button')
   element.type = 'button'
@@ -16,12 +18,31 @@ function markerElement(artwork: Artwork, selected: boolean) {
   return element
 }
 
+function facadeElement(artwork: Artwork) {
+  const element = document.createElement('div')
+  element.className = 'art-facade-marker'
+  element.style.setProperty('--facade-width', `${artwork.wallWidth ?? 190}px`)
+  element.style.setProperty('--facade-height', `${artwork.wallHeight ?? 300}px`)
+  const image = document.createElement('img')
+  image.src = artwork.wallImageUrl || artwork.imageUrl
+  image.alt = ''
+  const caption = document.createElement('span')
+  caption.className = 'art-facade-marker__caption'
+  caption.textContent = 'งานบนผนัง'
+  element.append(image, caption)
+  return element
+}
+
 export default function ArtMap() {
   const mapNode = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const markersRef = useRef<Marker[]>([])
+  const facadeMarkersRef = useRef<Marker[]>([])
+  const mapHomeRef = useRef<MapCamera | null>(null)
   const [artworks, setArtworks] = useState<Artwork[]>(() => readArtworks())
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [facadeId, setFacadeId] = useState<string | null>(null)
+  const [flyingId, setFlyingId] = useState<string | null>(null)
   const [introOpen, setIntroOpen] = useState(true)
   const [introLeaving, setIntroLeaving] = useState(false)
   const [language, setLanguage] = useState<'th' | 'en'>('th')
@@ -74,6 +95,8 @@ export default function ArtMap() {
     return () => {
       markersRef.current.forEach((marker) => marker.remove())
       markersRef.current = []
+      facadeMarkersRef.current.forEach((marker) => marker.remove())
+      facadeMarkersRef.current = []
       map.remove()
       mapRef.current = null
     }
@@ -86,12 +109,74 @@ export default function ArtMap() {
     markersRef.current = published.map((artwork) => {
       const element = markerElement(artwork, artwork.id === selectedId)
       element.addEventListener('click', () => {
-        setSelectedId(artwork.id)
-        map.flyTo({ center: [artwork.lng, artwork.lat], zoom: 15.8, pitch: 52, speed: 0.8 })
+        flyToArtwork(artwork)
       })
       return new maplibregl.Marker({ element, anchor: 'bottom' }).setLngLat([artwork.lng, artwork.lat]).addTo(map)
     })
   }, [published, selectedId])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    facadeMarkersRef.current.forEach((marker) => marker.remove())
+    facadeMarkersRef.current = []
+    if (!facadeId) return
+    const artwork = published.find((item) => item.id === facadeId)
+    if (!artwork) return
+    const element = facadeElement(artwork)
+    const marker = new maplibregl.Marker({
+      element,
+      anchor: 'center',
+      pitchAlignment: 'map',
+      rotationAlignment: 'map',
+      offset: [artwork.wallOffsetX ?? 0, artwork.wallOffsetY ?? -60],
+    })
+      .setLngLat([artwork.lng, artwork.lat])
+      .setRotation(artwork.wallRotation ?? 0)
+      .addTo(map)
+    facadeMarkersRef.current = [marker]
+    return () => { marker.remove() }
+  }, [facadeId, published])
+
+  const flyToArtwork = (artwork: Artwork) => {
+    const map = mapRef.current
+    if (!map) return
+    if (!mapHomeRef.current) {
+      const center = map.getCenter()
+      mapHomeRef.current = { center: [center.lng, center.lat], zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing() }
+    }
+    setSelectedId(null)
+    setFacadeId(null)
+    setFlyingId(artwork.id)
+    map.stop()
+    map.once('moveend', () => {
+      setFlyingId(null)
+      setSelectedId(artwork.id)
+      setFacadeId(artwork.id)
+    })
+    map.flyTo({
+      center: [artwork.cameraLng ?? artwork.lng, artwork.cameraLat ?? artwork.lat],
+      zoom: artwork.cameraZoom ?? 17.1,
+      pitch: artwork.cameraPitch ?? 56,
+      bearing: artwork.cameraBearing ?? 0,
+      duration: 3600,
+      curve: 1.35,
+      speed: 0.72,
+      essential: true,
+    })
+  }
+
+  const returnToMap = () => {
+    const map = mapRef.current
+    setSelectedId(null)
+    setFacadeId(null)
+    if (!map || !mapHomeRef.current) return
+    const home = mapHomeRef.current
+    setFlyingId('return')
+    map.stop()
+    map.once('moveend', () => setFlyingId(null))
+    map.flyTo({ ...home, duration: 1800, curve: 1.2, essential: true })
+  }
 
   const enterMap = () => {
     if (introLeaving) return
@@ -130,10 +215,11 @@ export default function ArtMap() {
         </div>
       </header>
       <div className="map-instructions"><span>ลากเพื่อมองรอบเมือง</span><span>Scroll เพื่อซูม</span><span>คลิกภาพเพื่อชมงาน</span></div>
+      {flyingId && <div className="art-flight-status" role="status">{flyingId === 'return' ? 'กำลังกลับสู่แผนที่…' : 'กำลังพาไปชมงานบนผนัง…'}</div>}
       <aside className={`art-detail ${selected ? 'is-open' : ''}`} aria-hidden={!selected}>
         {selected && (
           <>
-            <button className="art-detail__close" onClick={() => setSelectedId(null)} aria-label="ปิดรายละเอียด">×</button>
+            <button className="art-detail__close" onClick={returnToMap} aria-label="กลับไปแผนที่">×</button>
             <img src={selected.imageUrl} alt={selected.title} className="art-detail__image" />
             <div className="art-detail__body">
               <div className="eyebrow">{selected.venue} · {selected.year}</div>
@@ -145,6 +231,7 @@ export default function ArtMap() {
                 <a className="art-detail__route" href={`https://www.google.com/maps/search/?api=1&query=${selected.lat},${selected.lng}`} target="_blank" rel="noreferrer">เปิดเส้นทาง ↗</a>
                 <a className="art-detail__route art-detail__route--muted" href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${selected.lat},${selected.lng}`} target="_blank" rel="noreferrer">ดูภาพสถานที่ ↗</a>
               </div>
+              <button className="art-detail__back" onClick={returnToMap}>← กลับไปดูแผนที่</button>
             </div>
           </>
         )}

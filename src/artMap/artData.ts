@@ -12,6 +12,19 @@ export type Artwork = {
   lat: number
   lng: number
   imageUrl: string
+  /** Optional image and placement used to render the artwork on the building facade. */
+  wallImageUrl?: string
+  wallWidth?: number
+  wallHeight?: number
+  wallRotation?: number
+  wallOffsetX?: number
+  wallOffsetY?: number
+  /** Camera position used after selecting this artwork. */
+  cameraLat?: number
+  cameraLng?: number
+  cameraZoom?: number
+  cameraPitch?: number
+  cameraBearing?: number
   accent: string
   status: ArtStatus
 }
@@ -29,6 +42,17 @@ export const SEED_ARTWORKS: Artwork[] = [
     lat: 13.737148,
     lng: 100.509079,
     imageUrl: '/artworks/songwat-elephant-mural.jpg',
+    wallImageUrl: '/artworks/songwat-elephant-mural.jpg',
+    wallWidth: 210,
+    wallHeight: 330,
+    wallRotation: 8,
+    wallOffsetX: 0,
+    wallOffsetY: -72,
+    cameraLat: 13.73705,
+    cameraLng: 100.50884,
+    cameraZoom: 18.05,
+    cameraPitch: 58,
+    cameraBearing: 18,
     accent: '#c48b57',
     status: 'published',
   },
@@ -44,6 +68,17 @@ export const SEED_ARTWORKS: Artwork[] = [
     lat: 13.737375,
     lng: 100.508739,
     imageUrl: '/artworks/songwat-woman-mural.jpg',
+    wallImageUrl: '/artworks/songwat-woman-mural.jpg',
+    wallWidth: 205,
+    wallHeight: 345,
+    wallRotation: -6,
+    wallOffsetX: 0,
+    wallOffsetY: -78,
+    cameraLat: 13.73729,
+    cameraLng: 100.50861,
+    cameraZoom: 18.05,
+    cameraPitch: 58,
+    cameraBearing: -20,
     accent: '#e48587',
     status: 'published',
   },
@@ -96,12 +131,29 @@ export const SEED_ARTWORKS: Artwork[] = [
 
 const STORAGE_KEY = 'linemap-artworks-v1'
 
+function withArtworkDefaults(artwork: Artwork): Artwork {
+  return {
+    ...artwork,
+    wallImageUrl: artwork.wallImageUrl || artwork.imageUrl,
+    wallWidth: artwork.wallWidth ?? 190,
+    wallHeight: artwork.wallHeight ?? 300,
+    wallRotation: artwork.wallRotation ?? 0,
+    wallOffsetX: artwork.wallOffsetX ?? 0,
+    wallOffsetY: artwork.wallOffsetY ?? -60,
+    cameraLat: artwork.cameraLat ?? artwork.lat,
+    cameraLng: artwork.cameraLng ?? artwork.lng,
+    cameraZoom: artwork.cameraZoom ?? 17.1,
+    cameraPitch: artwork.cameraPitch ?? 56,
+    cameraBearing: artwork.cameraBearing ?? 0,
+  }
+}
+
 export function readArtworks(): Artwork[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return SEED_ARTWORKS
     const parsed = JSON.parse(raw) as Artwork[]
-    return Array.isArray(parsed) && parsed.length ? parsed : SEED_ARTWORKS
+    return Array.isArray(parsed) && parsed.length ? parsed.map(withArtworkDefaults) : SEED_ARTWORKS
   } catch {
     return SEED_ARTWORKS
   }

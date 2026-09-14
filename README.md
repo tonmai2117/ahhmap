@@ -13,6 +13,13 @@ The map uses MapLibre GL with OpenFreeMap vector tiles and a restrained 3D build
 layer. Bangkok coverage depends on the source tile data; replace the style URL with a
 licensed provider when production imagery or higher-detail 3D tiles are required.
 
+Selecting a published artwork flies the camera to its configured viewing position,
+then places the artwork image on the facade as a presentation overlay before opening
+the detail panel. The two Song Wat murals include calibrated starter values in
+`src/artMap/artData.ts`; new works can tune the camera and facade size, rotation, and
+pixel offset from `/admin`. These facade overlays are a visual layer above the map
+buildings, so precise architectural alignment still benefits from manual calibration.
+
 ## Existing AahhMap — standalone map
 
 Cloned from https://github.com/aahhtechlab-bit/AahhMap.git.

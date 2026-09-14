@@ -58,7 +58,7 @@ export default function ArtMap() {
             'source-layer': 'building',
             minzoom: 13,
             paint: {
-              'fill-extrusion-color': '#11161d',
+              'fill-extrusion-color': '#351512',
               'fill-extrusion-height': ['coalesce', ['get', 'render_height'], ['get', 'height'], 8],
               'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
               'fill-extrusion-opacity': 0.72,

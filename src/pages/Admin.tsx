@@ -4,7 +4,7 @@ import { makeArtworkId, readArtworks, writeArtworks, type Artwork, type ArtStatu
 import '../artMap/admin.css'
 
 const emptyForm: Omit<Artwork, 'id'> = {
-  title: '', artist: '', year: new Date().getFullYear().toString(), medium: 'ภาพถ่าย', description: '', venue: '', address: '', lat: 13.7367, lng: 100.5232, imageUrl: '', accent: '#e8b66a', status: 'draft',
+  title: '', artist: '', year: new Date().getFullYear().toString(), medium: 'ภาพถ่าย', description: '', venue: '', address: '', lat: 13.7367, lng: 100.5232, imageUrl: '', accent: '#EE4423', status: 'draft',
 }
 
 export default function Admin() {

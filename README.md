@@ -1,4 +1,19 @@
-# AahhMap — standalone map
+# Bangkok Art Map
+
+Bangkok Art Map is the exhibition-style map experience added to this Vite/React project.
+The public experience is available at `/` or `/art-map`; the content workspace is at
+`/admin`. The original AahhMap experience remains available at `/map` while the new
+art-map flow is reviewed.
+
+The demo admin uses browser-local storage so the full upload → pin → publish flow can
+be tried immediately without credentials. The `src/artMap/artData.ts` adapter is the
+boundary for connecting Supabase Storage/Postgres (or another production backend).
+
+The map uses MapLibre GL with OpenFreeMap vector tiles and a restrained 3D building
+layer. Bangkok coverage depends on the source tile data; replace the style URL with a
+licensed provider when production imagery or higher-detail 3D tiles are required.
+
+## Existing AahhMap — standalone map
 
 Cloned from https://github.com/aahhtechlab-bit/AahhMap.git.
 
@@ -72,4 +87,3 @@ The map includes local weather information and SVG animated cloud markers near t
 - **Local Dev & Preview**: Handled via Vite local server middleware (`/api/weather`) so the API key remains server-side only.
 - **Vercel Serverless Function**: Production deployment on Vercel automatically uses `/api/weather.ts` as a Node serverless API function, securely reading `process.env.OPENWEATHER_API_KEY`.
 - **Demo Fixtures**: Open `/map?demo=1` to test weather conditions (`clear`, `cloudy`, `light-rain`, `heavy-rain`, `thunderstorm`, `stale`, `error`) without issuing upstream API requests.
-

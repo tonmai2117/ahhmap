@@ -1,0 +1,42 @@
+.art-map-page { position: fixed; inset: 0; overflow: hidden; background: #050608; color: #f5f2eb; font-family: Georgia, 'Noto Serif Thai', serif; }
+.art-map-canvas { position: absolute; inset: 0; filter: grayscale(1) contrast(1.18) brightness(.5); }
+.art-map-canvas .maplibregl-canvas { outline: none; }
+.city-wireframe { position: absolute; inset: 0; pointer-events: none; overflow: hidden; perspective: 700px; opacity: .24; mix-blend-mode: screen; }
+.city-wireframe span { position: absolute; bottom: -8px; width: 3.5vw; min-width: 22px; max-width: 70px; border: 1px solid rgba(226,221,207,.64); border-bottom: 0; background: repeating-linear-gradient(90deg, transparent 0 8px, rgba(226,221,207,.15) 9px 10px), linear-gradient(90deg, rgba(20,22,27,.15), rgba(180,182,177,.18)); transform: rotateX(45deg) skewY(-10deg); animation: building-breathe 7s ease-in-out infinite; }
+@keyframes building-breathe { 0%,100% { transform: rotateX(45deg) skewY(-10deg) translateY(0); } 50% { transform: rotateX(45deg) skewY(-10deg) translateY(-8px); } }
+.art-map-header { position: absolute; z-index: 5; inset: 22px 28px auto; display: flex; justify-content: space-between; align-items: flex-start; text-shadow: 0 2px 14px #000; }
+.eyebrow { font: 600 10px/1.4 'Segoe UI', sans-serif; letter-spacing: .2em; text-transform: uppercase; color: #bab7ad; }
+.art-map-header h1 { margin-top: 12px; font-size: clamp(25px, 3vw, 44px); line-height: 1.04; font-weight: 400; letter-spacing: -.03em; }
+.art-map-header h1 em { color: #e3a95d; font-style: normal; }
+.art-map-header p { margin-top: 9px; color: #bcbab3; font: 13px/1.5 'Segoe UI', sans-serif; }
+.header-actions { display: flex; align-items: center; gap: 12px; font: 12px 'Segoe UI', sans-serif; }
+.language-toggle, .admin-link { border: 1px solid rgba(236,231,216,.34); background: rgba(7,8,11,.45); color: #eeeae0; padding: 9px 12px; text-decoration: none; }
+.language-toggle { cursor: pointer; }
+.map-instructions { position: absolute; z-index: 5; top: 24px; left: 50%; transform: translateX(-50%); display: flex; gap: 22px; color: #b9b7b1; font: 11px 'Segoe UI', sans-serif; letter-spacing: .05em; }
+.map-instructions span::before { content: '◌'; color: #e4ad5c; margin-right: 7px; }
+.art-map-footer { position: absolute; z-index: 5; bottom: 13px; left: 18px; right: 18px; display: flex; justify-content: space-between; color: #878883; font: 10px 'Segoe UI', sans-serif; }
+.art-marker { position: relative; width: 94px; padding: 0; border: 0; background: transparent; cursor: pointer; transform-origin: bottom center; transition: transform .35s ease; }
+.art-marker img { display: block; position: relative; width: 86px; height: 112px; margin: 0 auto; object-fit: cover; border: 2px solid #e7e2d8; box-shadow: 0 8px 22px #000b; }
+.art-marker__ring { position: absolute; z-index: -1; inset: -12px -7px 6px; border: 1px solid var(--marker-accent); transform: rotate(-4deg); opacity: .8; }
+.art-marker__label { display: block; margin-top: 7px; color: #fff; font: 11px 'Segoe UI', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 2px 8px #000; }
+.art-marker:hover, .art-marker.is-selected { transform: translateY(-8px) scale(1.08); }
+.art-detail { position: absolute; z-index: 10; top: 0; right: 0; bottom: 0; width: min(390px, 94vw); background: rgba(10,12,15,.94); border-left: 1px solid rgba(236,231,216,.22); transform: translateX(100%); transition: transform .45s cubic-bezier(.22,.61,.36,1); overflow: auto; }
+.art-detail.is-open { transform: translateX(0); }
+.art-detail__close { position: absolute; z-index: 2; top: 15px; right: 17px; width: 34px; height: 34px; border: 1px solid #fff7; background: #0008; color: #fff; font-size: 25px; cursor: pointer; }
+.art-detail__image { width: 100%; height: 49vh; max-height: 520px; object-fit: cover; filter: saturate(.75); }
+.art-detail__body { padding: 24px 26px 32px; }
+.art-detail h2 { margin: 11px 0 8px; font-size: 30px; font-weight: 400; line-height: 1.12; }
+.art-detail p { color: #c5c2b9; font: 15px/1.7 'Segoe UI', sans-serif; }
+.art-detail__artist { color: #e4b169 !important; margin-bottom: 18px; }
+.art-detail__location { margin-top: 22px; padding: 13px 0; border-top: 1px solid #fff2; border-bottom: 1px solid #fff2; font: 12px/1.5 'Segoe UI', sans-serif; }
+.art-detail__location span { display: block; color: #8e8d88; margin-bottom: 3px; }
+.art-detail__location strong { font-weight: 400; color: #e9e5db; }
+.art-detail__route { display: inline-block; margin-top: 22px; color: #e4b169; font: 600 13px 'Segoe UI', sans-serif; text-decoration: none; }
+.art-intro { position: absolute; z-index: 20; inset: 0; display: grid; place-items: center; background: #050608cc; backdrop-filter: blur(2px); }
+.art-intro__backdrop { position: absolute; inset: 0; background: radial-gradient(circle at 50% 55%, transparent 0 25%, #050608aa 75%), linear-gradient(120deg, #050608 0 19%, transparent 19% 81%, #050608 81%); }
+.art-intro__content { position: relative; width: min(590px, 90vw); text-align: center; }
+.art-intro h2 { margin: 18px 0 12px; font-size: clamp(34px, 6vw, 68px); font-weight: 400; line-height: .98; }
+.art-intro p { max-width: 420px; margin: 0 auto 30px; color: #c3c0b8; font: 15px/1.6 'Segoe UI', sans-serif; }
+.art-intro button { padding: 14px 30px; border: 1px solid #d8ad6c; background: transparent; color: #f4ecdf; font: 600 14px 'Segoe UI', sans-serif; cursor: pointer; }
+.art-intro button span { margin-left: 16px; color: #e4b169; }
+@media (max-width: 700px) { .art-map-header { inset: 15px 16px auto; } .art-map-header h1 { font-size: 27px; } .map-instructions { top: 125px; left: 16px; transform: none; gap: 11px; font-size: 10px; } .art-map-footer { font-size: 9px; } .art-map-footer span:last-child { display: none; } .art-detail { top: auto; width: 100%; height: min(78vh, 650px); border-left: 0; border-top: 1px solid #fff3; transform: translateY(100%); } .art-detail.is-open { transform: translateY(0); } .art-detail__image { height: 32vh; } .art-detail__body { padding: 18px 20px 28px; } .art-marker { width: 73px; } .art-marker img { width: 68px; height: 86px; } .art-marker__label { font-size: 9px; } }

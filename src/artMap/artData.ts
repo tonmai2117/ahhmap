@@ -1,0 +1,86 @@
+export type ArtStatus = 'draft' | 'published'
+
+export type Artwork = {
+  id: string
+  title: string
+  artist: string
+  year: string
+  medium: string
+  description: string
+  venue: string
+  address: string
+  lat: number
+  lng: number
+  imageUrl: string
+  accent: string
+  status: ArtStatus
+}
+
+export const SEED_ARTWORKS: Artwork[] = [
+  {
+    id: 'bkk-01',
+    title: 'แสงที่เดินทางผ่านเมือง',
+    artist: 'Studio Chao Phraya',
+    year: '2025',
+    medium: 'ภาพถ่ายดิจิทัล',
+    description: 'บันทึกจังหวะแสงยามเย็นที่สะท้อนบนผิวน้ำและผนังเมืองเก่า',
+    venue: 'ท่ามหาราช',
+    address: 'ถนนมหาราช เขตพระนคร กรุงเทพฯ',
+    lat: 13.7466,
+    lng: 100.4917,
+    imageUrl: 'https://images.unsplash.com/photo-1549490349-8643362247b5?auto=format&fit=crop&w=900&q=85',
+    accent: '#f1b35b',
+    status: 'published',
+  },
+  {
+    id: 'bkk-02',
+    title: 'กรุงเทพฯ ในชั้นความทรงจำ',
+    artist: 'Pimchanok K.',
+    year: '2024',
+    medium: 'สื่อผสม',
+    description: 'ชิ้นงานที่ประกอบเมือง เสียง และความทรงจำของผู้คนที่เดินผ่าน',
+    venue: 'เจริญกรุง 32',
+    address: 'ซอยเจริญกรุง 32 เขตบางรัก กรุงเทพฯ',
+    lat: 13.7245,
+    lng: 100.5132,
+    imageUrl: 'https://images.unsplash.com/photo-1577083288073-40892c0860a4?auto=format&fit=crop&w=900&q=85',
+    accent: '#d87055',
+    status: 'published',
+  },
+  {
+    id: 'bkk-03',
+    title: 'จังหวะของทางแยก',
+    artist: 'Nattapol W.',
+    year: '2023',
+    medium: 'ภาพพิมพ์',
+    description: 'เส้นสายของการเคลื่อนที่ ณ จุดตัดของผู้คน รถ และสถาปัตยกรรม',
+    venue: 'สวนเบญจกิติ',
+    address: 'ถนนรัชดาภิเษก เขตคลองเตย กรุงเทพฯ',
+    lat: 13.7308,
+    lng: 100.5557,
+    imageUrl: 'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?auto=format&fit=crop&w=900&q=85',
+    accent: '#9aa6c8',
+    status: 'published',
+  },
+]
+
+const STORAGE_KEY = 'linemap-artworks-v1'
+
+export function readArtworks(): Artwork[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return SEED_ARTWORKS
+    const parsed = JSON.parse(raw) as Artwork[]
+    return Array.isArray(parsed) && parsed.length ? parsed : SEED_ARTWORKS
+  } catch {
+    return SEED_ARTWORKS
+  }
+}
+
+export function writeArtworks(artworks: Artwork[]) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(artworks))
+}
+
+export function makeArtworkId() {
+  return `art-${Date.now().toString(36)}`
+}

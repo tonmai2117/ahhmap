@@ -34,7 +34,8 @@
 .art-detail__links { display: flex; flex-wrap: wrap; gap: 18px; }
 .art-detail__route { display: inline-block; margin-top: 22px; color: #e4b169; font: 600 13px 'Segoe UI', sans-serif; text-decoration: none; }
 .art-detail__route--muted { color: #bcbab3; }
-.art-intro { position: absolute; z-index: 20; inset: 0; display: grid; place-items: center; background: #050608cc; backdrop-filter: blur(2px); }
+.art-intro { position: absolute; z-index: 20; inset: 0; display: grid; place-items: center; background: #050608cc; backdrop-filter: blur(2px); opacity: 1; transition: opacity .56s cubic-bezier(.22,.61,.36,1); }
+.art-intro.is-leaving { opacity: 0; pointer-events: none; }
 .art-intro__backdrop { position: absolute; inset: 0; background: radial-gradient(circle at 50% 55%, transparent 0 25%, #050608aa 75%), linear-gradient(120deg, #050608 0 19%, transparent 19% 81%, #050608 81%); }
 .art-intro__content { position: relative; width: min(590px, 90vw); text-align: center; }
 .art-intro h2 { margin: 18px 0 12px; font-size: clamp(34px, 6vw, 68px); font-weight: 400; line-height: .98; }

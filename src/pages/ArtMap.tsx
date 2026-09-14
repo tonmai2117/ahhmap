@@ -5,7 +5,7 @@ import { readArtworks, type Artwork } from '../artMap/artData'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import '../artMap/artMap.css'
 
-const BANGKOK: [number, number] = [100.5232, 13.7367]
+const SONG_WAT: [number, number] = [100.509, 13.7372]
 
 function markerElement(artwork: Artwork, selected: boolean) {
   const element = document.createElement('button')
@@ -23,6 +23,7 @@ export default function ArtMap() {
   const [artworks, setArtworks] = useState<Artwork[]>(() => readArtworks())
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [introOpen, setIntroOpen] = useState(true)
+  const [introLeaving, setIntroLeaving] = useState(false)
   const [language, setLanguage] = useState<'th' | 'en'>('th')
 
   const published = useMemo(() => artworks.filter((item) => item.status === 'published'), [artworks])
@@ -39,10 +40,10 @@ export default function ArtMap() {
     const map = new maplibregl.Map({
       container: mapNode.current,
       style: 'https://tiles.openfreemap.org/styles/liberty',
-      center: BANGKOK,
-      zoom: 13.2,
-      pitch: 48,
-      bearing: -18,
+      center: [100.5232, 13.747] as [number, number],
+      zoom: 10.8,
+      pitch: 18,
+      bearing: -8,
     })
     map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), 'bottom-right')
     map.on('load', () => {
@@ -92,6 +93,25 @@ export default function ArtMap() {
     })
   }, [published, selectedId])
 
+  const enterMap = () => {
+    if (introLeaving) return
+    setIntroLeaving(true)
+    mapRef.current?.flyTo({
+      center: SONG_WAT,
+      zoom: 15.4,
+      pitch: 54,
+      bearing: -28,
+      duration: 3800,
+      curve: 1.3,
+      speed: 0.72,
+      essential: true,
+    })
+    window.setTimeout(() => {
+      setIntroOpen(false)
+      setIntroLeaving(false)
+    }, 560)
+  }
+
   return (
     <main className="art-map-page">
       <div ref={mapNode} className="art-map-canvas" aria-label="แผนที่งานศิลป์ในกรุงเทพฯ" />
@@ -130,13 +150,13 @@ export default function ArtMap() {
         )}
       </aside>
       {introOpen && (
-        <section className="art-intro">
+          <section className={`art-intro${introLeaving ? ' is-leaving' : ''}`}>
           <div className="art-intro__backdrop" />
           <div className="art-intro__content">
             <div className="eyebrow">TOKYO-INSPIRED / BANGKOK EDITION</div>
             <h2>ศิลปะไม่ได้อยู่แค่ในแกลเลอรี</h2>
             <p>เดินทางผ่านกรุงเทพฯ ในแผนที่ที่ทุกพิกัดกลายเป็นพื้นที่จัดแสดง</p>
-            <button onClick={() => setIntroOpen(false)}>เข้าสู่แผนที่ <span>→</span></button>
+            <button onClick={enterMap} disabled={introLeaving}>เข้าสู่แผนที่ <span>→</span></button>
           </div>
         </section>
       )}

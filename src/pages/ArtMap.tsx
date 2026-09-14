@@ -121,7 +121,10 @@ export default function ArtMap() {
               <p className="art-detail__artist">{selected.artist} / {selected.medium}</p>
               <p>{selected.description}</p>
               <div className="art-detail__location"><span>สถานที่</span><strong>{selected.address}</strong></div>
-              <a className="art-detail__route" href={`https://www.google.com/maps/search/?api=1&query=${selected.lat},${selected.lng}`} target="_blank" rel="noreferrer">เปิดเส้นทาง ↗</a>
+              <div className="art-detail__links">
+                <a className="art-detail__route" href={`https://www.google.com/maps/search/?api=1&query=${selected.lat},${selected.lng}`} target="_blank" rel="noreferrer">เปิดเส้นทาง ↗</a>
+                <a className="art-detail__route art-detail__route--muted" href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${selected.lat},${selected.lng}`} target="_blank" rel="noreferrer">ดูภาพสถานที่ ↗</a>
+              </div>
             </div>
           </>
         )}

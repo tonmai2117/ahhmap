@@ -31,7 +31,9 @@
 .art-detail__location { margin-top: 22px; padding: 13px 0; border-top: 1px solid #fff2; border-bottom: 1px solid #fff2; font: 12px/1.5 'Segoe UI', sans-serif; }
 .art-detail__location span { display: block; color: #8e8d88; margin-bottom: 3px; }
 .art-detail__location strong { font-weight: 400; color: #e9e5db; }
+.art-detail__links { display: flex; flex-wrap: wrap; gap: 18px; }
 .art-detail__route { display: inline-block; margin-top: 22px; color: #e4b169; font: 600 13px 'Segoe UI', sans-serif; text-decoration: none; }
+.art-detail__route--muted { color: #bcbab3; }
 .art-intro { position: absolute; z-index: 20; inset: 0; display: grid; place-items: center; background: #050608cc; backdrop-filter: blur(2px); }
 .art-intro__backdrop { position: absolute; inset: 0; background: radial-gradient(circle at 50% 55%, transparent 0 25%, #050608aa 75%), linear-gradient(120deg, #050608 0 19%, transparent 19% 81%, #050608 81%); }
 .art-intro__content { position: relative; width: min(590px, 90vw); text-align: center; }

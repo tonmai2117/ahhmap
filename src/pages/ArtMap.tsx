@@ -106,6 +106,8 @@ export default function ArtMap() {
     const map = mapRef.current
     if (!map) return
     markersRef.current.forEach((marker) => marker.remove())
+    markersRef.current = []
+    if (selectedId || flyingId) return
     markersRef.current = published.map((artwork) => {
       const element = markerElement(artwork, artwork.id === selectedId)
       element.addEventListener('click', () => {
@@ -113,7 +115,7 @@ export default function ArtMap() {
       })
       return new maplibregl.Marker({ element, anchor: 'bottom' }).setLngLat([artwork.lng, artwork.lat]).addTo(map)
     })
-  }, [published, selectedId])
+  }, [published, selectedId, flyingId])
 
   useEffect(() => {
     const map = mapRef.current
@@ -127,8 +129,8 @@ export default function ArtMap() {
     const marker = new maplibregl.Marker({
       element,
       anchor: 'center',
-      pitchAlignment: 'map',
-      rotationAlignment: 'map',
+      pitchAlignment: 'viewport',
+      rotationAlignment: 'viewport',
       offset: [artwork.wallOffsetX ?? 0, artwork.wallOffsetY ?? -60],
     })
       .setLngLat([artwork.lng, artwork.lat])

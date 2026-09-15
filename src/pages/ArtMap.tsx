@@ -1,254 +1,170 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import maplibregl, { type Map as MapLibreMap, type Marker } from 'maplibre-gl'
 import { Link } from 'react-router-dom'
 import { readArtworks, type Artwork } from '../artMap/artData'
+import { createArtScene, facadeCamera, flyArtCamera, OVERVIEW } from '../artMap/mapScene'
+import { type FacadeLayer } from '../artMap/FacadeLayer'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import '../artMap/artMap.css'
 
-const SONG_WAT: [number, number] = [100.509, 13.7372]
+type MapCamera = { center: [number, number]; zoom: number; pitch: number; bearing: number; elevation: number }
 
-type MapCamera = { center: [number, number]; zoom: number; pitch: number; bearing: number }
-
-function markerElement(artwork: Artwork, selected: boolean) {
+function markerElement(artwork: Artwork) {
   const element = document.createElement('button')
   element.type = 'button'
-  element.className = `art-marker${selected ? ' is-selected' : ''}`
+  element.className = 'art-marker'
   element.setAttribute('aria-label', `เปิดผลงาน ${artwork.title}`)
-  element.innerHTML = `<span class="art-marker__ring" style="--marker-accent:${artwork.accent}"></span><img src="${artwork.imageUrl}" alt="" /><span class="art-marker__label">${artwork.title}</span>`
-  return element
-}
-
-function facadeElement(artwork: Artwork) {
-  const element = document.createElement('div')
-  element.className = 'art-facade-marker'
-  element.style.setProperty('--facade-width', `${artwork.wallWidth ?? 190}px`)
-  element.style.setProperty('--facade-height', `${artwork.wallHeight ?? 300}px`)
+  const ring = document.createElement('span')
+  ring.className = 'art-marker__ring'
+  ring.style.setProperty('--marker-accent', artwork.accent)
   const image = document.createElement('img')
-  image.src = artwork.wallImageUrl || artwork.imageUrl
+  image.src = artwork.imageUrl
   image.alt = ''
-  const caption = document.createElement('span')
-  caption.className = 'art-facade-marker__caption'
-  caption.textContent = 'งานบนผนัง'
-  element.append(image, caption)
+  const title = document.createElement('span')
+  title.className = 'art-marker__label'
+  title.textContent = artwork.title
+  element.append(ring, image, title)
   return element
 }
 
 export default function ArtMap() {
   const mapNode = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
+  const layerRef = useRef<FacadeLayer | null>(null)
   const markersRef = useRef<Marker[]>([])
-  const facadeMarkersRef = useRef<Marker[]>([])
   const mapHomeRef = useRef<MapCamera | null>(null)
+  const arrivalRef = useRef<(() => void) | null>(null)
+  const dialogRef = useRef<HTMLDialogElement>(null)
   const [artworks, setArtworks] = useState<Artwork[]>(() => readArtworks())
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [facadeId, setFacadeId] = useState<string | null>(null)
-  const [flyingId, setFlyingId] = useState<string | null>(null)
+  const [phase, setPhase] = useState<'overview' | 'flying' | 'arrived'>('overview')
+  const [mapReady, setMapReady] = useState(false)
   const [introOpen, setIntroOpen] = useState(true)
-  const [introLeaving, setIntroLeaving] = useState(false)
-  const [language, setLanguage] = useState<'th' | 'en'>('th')
-
+  const [error, setError] = useState('')
+  const [photoZoom, setPhotoZoom] = useState(1)
   const published = useMemo(() => artworks.filter((item) => item.status === 'published'), [artworks])
   const selected = published.find((item) => item.id === selectedId) ?? null
+
+  const cancelFlight = useCallback(() => {
+    const map = mapRef.current
+    if (!map) return
+    if (arrivalRef.current) map.off('moveend', arrivalRef.current)
+    arrivalRef.current = null
+    map.stop()
+  }, [])
 
   useEffect(() => {
     const refresh = () => setArtworks(readArtworks())
     window.addEventListener('linemap-artworks-updated', refresh)
-    return () => window.removeEventListener('linemap-artworks-updated', refresh)
+    window.addEventListener('storage', refresh)
+    return () => { window.removeEventListener('linemap-artworks-updated', refresh); window.removeEventListener('storage', refresh) }
   }, [])
 
   useEffect(() => {
-    if (!mapNode.current || mapRef.current) return
-    const map = new maplibregl.Map({
-      container: mapNode.current,
-      style: 'https://tiles.openfreemap.org/styles/liberty',
-      center: [100.5232, 13.747] as [number, number],
-      zoom: 10.8,
-      pitch: 18,
-      bearing: -8,
-    })
-    map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), 'bottom-right')
-    map.on('load', () => {
-      const style = map.getStyle()
-      const sourceId = Object.keys(style.sources).find((id) => style.sources[id].type === 'vector')
-      if (sourceId && !map.getLayer('linemap-3d-buildings')) {
-        try {
-          map.addLayer({
-            id: 'linemap-3d-buildings',
-            type: 'fill-extrusion',
-            source: sourceId,
-            'source-layer': 'building',
-            minzoom: 13,
-            paint: {
-              'fill-extrusion-color': '#351512',
-              'fill-extrusion-height': ['coalesce', ['get', 'render_height'], ['get', 'height'], 8],
-              'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
-              'fill-extrusion-opacity': 0.72,
-            },
-          },)
-        } catch {
-          // Some styles do not expose an OSM building source; the base style remains usable.
-        }
-      }
-    })
-    map.on('click', 'linemap-3d-buildings', () => map.getCanvas().style.cursor = '')
+    if (!mapNode.current) return
+    const { map, facades } = createArtScene(mapNode.current, { onReady: () => setMapReady(true), onError: setError }, readArtworks().filter((a) => a.status === 'published'))
     mapRef.current = map
+    layerRef.current = facades
+    const interrupt = (event: { originalEvent?: unknown }) => {
+      if (!event.originalEvent || !arrivalRef.current) return
+      cancelFlight()
+      setPhase('arrived')
+    }
+    map.on('dragstart', interrupt)
+    map.on('zoomstart', interrupt)
+    map.on('error', (event) => { if (/webgl|context/i.test(event.error.message)) setError('แสดงฉาก 3D ไม่สำเร็จ กรุณารีโหลดหน้าเว็บ') })
+    const observer = new ResizeObserver(() => map.resize())
+    observer.observe(mapNode.current)
     return () => {
+      cancelFlight()
+      observer.disconnect()
       markersRef.current.forEach((marker) => marker.remove())
       markersRef.current = []
-      facadeMarkersRef.current.forEach((marker) => marker.remove())
-      facadeMarkersRef.current = []
       map.remove()
       mapRef.current = null
+      layerRef.current = null
     }
-  }, [])
+  }, [cancelFlight])
 
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-    markersRef.current.forEach((marker) => marker.remove())
-    markersRef.current = []
-    if (selectedId || flyingId) return
-    markersRef.current = published.map((artwork) => {
-      const element = markerElement(artwork, artwork.id === selectedId)
-      element.addEventListener('click', () => {
-        flyToArtwork(artwork)
-      })
-      return new maplibregl.Marker({ element, anchor: 'bottom' }).setLngLat([artwork.lng, artwork.lat]).addTo(map)
-    })
-  }, [published, selectedId, flyingId])
+  useEffect(() => { if (mapReady) layerRef.current?.setArtworks(published) }, [published, mapReady])
 
-  useEffect(() => {
+  const flyToArtwork = useCallback((artwork: Artwork) => {
     const map = mapRef.current
-    if (!map) return
-    facadeMarkersRef.current.forEach((marker) => marker.remove())
-    facadeMarkersRef.current = []
-    if (!facadeId) return
-    const artwork = published.find((item) => item.id === facadeId)
-    if (!artwork) return
-    const element = facadeElement(artwork)
-    const marker = new maplibregl.Marker({
-      element,
-      anchor: 'center',
-      pitchAlignment: 'viewport',
-      rotationAlignment: 'viewport',
-      offset: [artwork.wallOffsetX ?? 0, artwork.wallOffsetY ?? -60],
-    })
-      .setLngLat([artwork.lng, artwork.lat])
-      .setRotation(artwork.wallRotation ?? 0)
-      .addTo(map)
-    facadeMarkersRef.current = [marker]
-    return () => { marker.remove() }
-  }, [facadeId, published])
-
-  const flyToArtwork = (artwork: Artwork) => {
-    const map = mapRef.current
-    if (!map) return
+    if (!map || !mapReady) return
+    cancelFlight()
     if (!mapHomeRef.current) {
       const center = map.getCenter()
-      mapHomeRef.current = { center: [center.lng, center.lat], zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing() }
+      mapHomeRef.current = { center: [center.lng, center.lat], zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), elevation: map.getCenterElevation() }
     }
-    setSelectedId(null)
-    setFacadeId(null)
-    setFlyingId(artwork.id)
-    map.stop()
-    map.once('moveend', () => {
-      setFlyingId(null)
-      setSelectedId(artwork.id)
-      setFacadeId(artwork.id)
-    })
-    map.flyTo({
-      center: [artwork.cameraLng ?? artwork.lng, artwork.cameraLat ?? artwork.lat],
-      zoom: artwork.cameraZoom ?? 17.1,
-      pitch: artwork.cameraPitch ?? 56,
-      bearing: artwork.cameraBearing ?? 0,
-      duration: 3600,
-      curve: 1.35,
-      speed: 0.72,
-      essential: true,
-    })
-  }
+    setSelectedId(artwork.id)
+    setPhase('flying')
+    const mobile = map.getContainer().clientWidth <= 700
+    const camera = artwork.facade ? facadeCamera(map, artwork.facade) : { center: [artwork.lng, artwork.lat] as [number, number], zoom: 18, pitch: 55, bearing: artwork.cameraBearing ?? 0, elevation: 0 }
+    const arrive = () => { arrivalRef.current = null; setPhase('arrived') }
+    arrivalRef.current = arrive
+    map.once('moveend', arrive)
+    flyArtCamera(map, { ...camera, padding: { top: 70, bottom: mobile ? 205 : 40, left: 20, right: mobile ? 20 : 340 }, duration: 3800, curve: 1.25, essential: false })
+  }, [cancelFlight, mapReady])
 
-  const returnToMap = () => {
+  useEffect(() => {
     const map = mapRef.current
+    if (!map || !mapReady) return
+    markersRef.current.forEach((marker) => marker.remove())
+    markersRef.current = []
+    if (selectedId) return
+    markersRef.current = published.map((artwork) => {
+      const element = markerElement(artwork)
+      element.addEventListener('click', () => flyToArtwork(artwork))
+      return new maplibregl.Marker({ element, anchor: 'bottom' }).setLngLat([artwork.lng, artwork.lat]).addTo(map)
+    })
+    return () => { markersRef.current.forEach((marker) => marker.remove()) }
+  }, [published, selectedId, mapReady, flyToArtwork])
+
+  const returnToMap = useCallback(() => {
+    cancelFlight()
     setSelectedId(null)
-    setFacadeId(null)
-    if (!map || !mapHomeRef.current) return
-    const home = mapHomeRef.current
-    setFlyingId('return')
-    map.stop()
-    map.once('moveend', () => setFlyingId(null))
-    map.flyTo({ ...home, duration: 1800, curve: 1.2, essential: true })
-  }
+    setPhase('overview')
+    const home = mapHomeRef.current ?? OVERVIEW
+    mapHomeRef.current = null
+    if (mapRef.current) flyArtCamera(mapRef.current, { ...home, padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 1600, essential: false })
+  }, [cancelFlight])
+
+  useEffect(() => {
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape' && !dialogRef.current?.open) returnToMap() }
+    window.addEventListener('keydown', escape)
+    return () => window.removeEventListener('keydown', escape)
+  }, [returnToMap])
 
   const enterMap = () => {
-    if (introLeaving) return
-    setIntroLeaving(true)
-    mapRef.current?.flyTo({
-      center: SONG_WAT,
-      zoom: 15.4,
-      pitch: 54,
-      bearing: -28,
-      duration: 3800,
-      curve: 1.3,
-      speed: 0.72,
-      essential: true,
-    })
-    window.setTimeout(() => {
-      setIntroOpen(false)
-      setIntroLeaving(false)
-    }, 560)
+    if (!mapReady) return
+    setIntroOpen(false)
+    mapRef.current?.flyTo({ ...OVERVIEW, duration: 3200, essential: false })
   }
+  const rotate = (degrees: number) => {
+    cancelFlight()
+    setPhase('arrived')
+    const map = mapRef.current
+    if (map) map.easeTo({ bearing: map.getBearing() + degrees, duration: 800, essential: false })
+  }
+  const openPhoto = () => { setPhotoZoom(1); dialogRef.current?.showModal() }
 
   return (
-    <main className="art-map-page">
+    <main className={`art-map-page${selected ? ' is-focused' : ''}`}>
       <div ref={mapNode} className="art-map-canvas" aria-label="แผนที่งานศิลป์ในกรุงเทพฯ" />
-      <div className="city-wireframe" aria-hidden="true">
-        {Array.from({ length: 20 }, (_, index) => <span key={index} style={{ height: `${38 + ((index * 17) % 90)}px`, left: `${(index * 6.2) % 100}%`, animationDelay: `${index * -0.25}s` }} />)}
-      </div>
       <header className="art-map-header">
-        <div>
-          <div className="eyebrow">BANGKOK / DIGITAL ART WALK</div>
-          <h1>เมืองที่มองเห็นได้<br /><em>ในอีกชั้นหนึ่ง</em></h1>
-          <p>{published.length} จุดงานศิลป์ · กรุงเทพฯ</p>
-        </div>
-        <div className="header-actions">
-          <button className="language-toggle" onClick={() => setLanguage(language === 'th' ? 'en' : 'th')} aria-label="เปลี่ยนภาษา">{language === 'th' ? 'TH / EN' : 'EN / TH'}</button>
-          <Link className="admin-link" to="/admin">หลังบ้าน ↗</Link>
-        </div>
+        {selected ? <div className="focus-heading"><button onClick={returnToMap}>← แผนที่</button><div><div className="eyebrow">SONG WAT / ART WALK</div><h1>{selected.title}</h1></div></div> : <div><div className="eyebrow">BANGKOK / DIGITAL ART WALK</div><h1>เมืองที่มองเห็นได้<br /><em>ในอีกชั้นหนึ่ง</em></h1><p>{published.length} จุดงานศิลป์ · กรุงเทพฯ</p></div>}
+        <Link className="admin-link" to="/admin">หลังบ้าน ↗</Link>
       </header>
-      <div className="map-instructions"><span>ลากเพื่อมองรอบเมือง</span><span>Scroll เพื่อซูม</span><span>คลิกภาพเพื่อชมงาน</span></div>
-      {flyingId && <div className="art-flight-status" role="status">{flyingId === 'return' ? 'กำลังกลับสู่แผนที่…' : 'กำลังพาไปชมงานบนผนัง…'}</div>}
-      <aside className={`art-detail ${selected ? 'is-open' : ''}`} aria-hidden={!selected}>
-        {selected && (
-          <>
-            <button className="art-detail__close" onClick={returnToMap} aria-label="กลับไปแผนที่">×</button>
-            <img src={selected.imageUrl} alt={selected.title} className="art-detail__image" />
-            <div className="art-detail__body">
-              <div className="eyebrow">{selected.venue} · {selected.year}</div>
-              <h2>{selected.title}</h2>
-              <p className="art-detail__artist">{selected.artist} / {selected.medium}</p>
-              <p>{selected.description}</p>
-              <div className="art-detail__location"><span>สถานที่</span><strong>{selected.address}</strong></div>
-              <div className="art-detail__links">
-                <a className="art-detail__route" href={`https://www.google.com/maps/search/?api=1&query=${selected.lat},${selected.lng}`} target="_blank" rel="noreferrer">เปิดเส้นทาง ↗</a>
-                <a className="art-detail__route art-detail__route--muted" href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${selected.lat},${selected.lng}`} target="_blank" rel="noreferrer">ดูภาพสถานที่ ↗</a>
-              </div>
-              <button className="art-detail__back" onClick={returnToMap}>← กลับไปดูแผนที่</button>
-            </div>
-          </>
-        )}
+      {!selected && <div className="map-instructions"><span>ลากเพื่อเลื่อน</span><span>คลิกขวาลากเพื่อหมุน</span><span>คลิกภาพเพื่อชมงาน</span></div>}
+      {!introOpen && <nav className="artwork-switcher" aria-label="เลือกผลงาน">{published.slice(0, 2).map((a) => <button key={a.id} aria-pressed={a.id === selectedId} onClick={() => flyToArtwork(a)} disabled={!mapReady}><img src={a.imageUrl} alt="" /><span>{a.id === 'songwat-elephant' ? 'ช้าง' : a.id === 'songwat-woman' ? 'หญิงสาว' : a.title}</span></button>)}</nav>}
+      {phase === 'flying' && <div className="art-flight-status" role="status">กำลังบินไปยัง {selected?.title}…</div>}
+      {error && <div className="art-error" role="alert">{error}</div>}
+      {selected && <div className="art-orbit-controls"><button onClick={() => rotate(-45)} aria-label="หมุนรอบอาคารไปทางซ้าย">↶ หมุนซ้าย</button><button onClick={() => flyToArtwork(selected)}>มุมชมงาน</button><button onClick={() => rotate(45)} aria-label="หมุนรอบอาคารไปทางขวา">หมุนขวา ↷</button></div>}
+      <aside className={`art-detail ${selected && phase === 'arrived' ? 'is-open' : ''}`} aria-hidden={!selected || phase !== 'arrived'}>
+        {selected && phase === 'arrived' && <div className="art-detail__body"><div className="eyebrow">{selected.venue} · {selected.year}</div><h2>{selected.title}</h2><p className="art-detail__artist">{selected.artist}</p><p className="art-detail__description">{selected.description}</p><button className="art-photo-button" onClick={openPhoto}><img src={selected.imageUrl} alt="" /><span>ดูภาพถ่ายต้นฉบับ ↗</span></button><div className="art-detail__links"><a className="art-detail__route" href={`https://www.google.com/maps/search/?api=1&query=${selected.lat},${selected.lng}`} target="_blank" rel="noreferrer">เปิดเส้นทาง ↗</a><button className="art-detail__back" onClick={returnToMap}>กลับแผนที่</button></div></div>}
       </aside>
-      {introOpen && (
-          <section className={`art-intro${introLeaving ? ' is-leaving' : ''}`}>
-          <div className="art-intro__backdrop" />
-          <div className="art-intro__content">
-            <div className="eyebrow">TOKYO-INSPIRED / BANGKOK EDITION</div>
-            <h2>ศิลปะไม่ได้อยู่แค่ในแกลเลอรี</h2>
-            <p>เดินทางผ่านกรุงเทพฯ ในแผนที่ที่ทุกพิกัดกลายเป็นพื้นที่จัดแสดง</p>
-            <button onClick={enterMap} disabled={introLeaving}>เข้าสู่แผนที่ <span>→</span></button>
-          </div>
-        </section>
-      )}
+      <dialog ref={dialogRef} className="art-photo-dialog" aria-label="ภาพถ่ายต้นฉบับของผลงาน"><div className="art-photo-toolbar"><span>{selected?.title}</span><button onClick={() => setPhotoZoom((z) => Math.max(1, z - 0.5))} disabled={photoZoom === 1} aria-label="ย่อภาพ">−</button><button onClick={() => setPhotoZoom((z) => Math.min(3, z + 0.5))} disabled={photoZoom === 3} aria-label="ขยายภาพ">+</button><button onClick={() => dialogRef.current?.close()} aria-label="ปิดภาพถ่าย">×</button></div><div className="art-photo-scroll">{selected && <img src={selected.imageUrl} alt={selected.title} style={{ width: `${photoZoom * 100}%`, maxWidth: 'none', height: photoZoom === 1 ? '100%' : 'auto', objectFit: 'contain' }} />}</div></dialog>
+      {introOpen && <section className="art-intro"><div className="art-intro__backdrop" /><div className="art-intro__content"><div className="eyebrow">BANGKOK / ART IN THE CITY</div><h2>ศิลปะไม่ได้อยู่แค่ในแกลเลอรี</h2><p>เดินทางผ่านกรุงเทพฯ ในแผนที่ที่ทุกพิกัดกลายเป็นพื้นที่จัดแสดง</p><button onClick={enterMap} disabled={!mapReady}>{mapReady ? 'เข้าสู่แผนที่ →' : 'กำลังโหลดแผนที่…'}</button></div></section>}
       <footer className="art-map-footer"><span>Map © OpenStreetMap contributors · OpenFreeMap</span><span>Bangkok Art Map / 2026</span></footer>
     </main>
   )

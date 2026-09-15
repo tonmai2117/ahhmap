@@ -1,3 +1,4 @@
+import { validFacade, type FacadePlacement } from './facadeGeometry'
 export type ArtStatus = 'draft' | 'published'
 
 export type Artwork = {
@@ -14,6 +15,8 @@ export type Artwork = {
   imageUrl: string
   /** Optional image and placement used to render the artwork on the building facade. */
   wallImageUrl?: string
+  facade?: FacadePlacement | null
+  /** Legacy screen-overlay fields: retained only for older exported data. */
   wallWidth?: number
   wallHeight?: number
   wallRotation?: number
@@ -43,6 +46,13 @@ export const SEED_ARTWORKS: Artwork[] = [
     lng: 100.509079,
     imageUrl: '/artworks/songwat-elephant-mural.jpg',
     wallImageUrl: '/artworks/songwat-elephant-mural.jpg',
+    facade: {
+      wallStart: [100.50893247127533, 13.737045371105651],
+      wallEnd: [100.50903975963593, 13.737201700245564],
+      outwardBearing: 304,
+      along: 0.76, width: 7, height: 18, bottom: 1.1, cameraDistance: 33,
+      crop: [[0.512, 0.254], [0.901, 0.301], [0.929, 0.945], [0.473, 0.922]],
+    },
     wallWidth: 210,
     wallHeight: 330,
     wallRotation: 8,
@@ -69,6 +79,13 @@ export const SEED_ARTWORKS: Artwork[] = [
     lng: 100.508739,
     imageUrl: '/artworks/songwat-woman-mural.jpg',
     wallImageUrl: '/artworks/songwat-woman-mural.jpg',
+    facade: {
+      wallStart: [100.50863206386566, 13.737446615688455],
+      wallEnd: [100.50856232643127, 13.737347607348752],
+      outwardBearing: 124,
+      along: 0.23, width: 2.8, height: 4.2, bottom: 0.4, cameraDistance: 10,
+      crop: [[0.215, 0.287], [0.809, 0.124], [0.795, 0.892], [0.175, 0.91]],
+    },
     wallWidth: 205,
     wallHeight: 345,
     wallRotation: -6,
@@ -132,8 +149,11 @@ export const SEED_ARTWORKS: Artwork[] = [
 const STORAGE_KEY = 'linemap-artworks-v1'
 
 function withArtworkDefaults(artwork: Artwork): Artwork {
+  const seed = SEED_ARTWORKS.find((item) => item.id === artwork.id)
+  const facade = artwork.facade === undefined ? seed?.facade : artwork.facade
   return {
     ...artwork,
+    facade: facade && validFacade(facade) ? facade : null,
     wallImageUrl: artwork.wallImageUrl || artwork.imageUrl,
     wallWidth: artwork.wallWidth ?? 190,
     wallHeight: artwork.wallHeight ?? 300,
@@ -153,7 +173,7 @@ export function readArtworks(): Artwork[] {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return SEED_ARTWORKS
     const parsed = JSON.parse(raw) as Artwork[]
-    return Array.isArray(parsed) && parsed.length ? parsed.map(withArtworkDefaults) : SEED_ARTWORKS
+    return Array.isArray(parsed) ? parsed.map(withArtworkDefaults) : SEED_ARTWORKS
   } catch {
     return SEED_ARTWORKS
   }

@@ -17,11 +17,13 @@ During a focused artwork view, the map markers recede so the calibrated facade i
 is the visual focus while the detail panel is open.
 
 Selecting a published artwork flies the camera to its configured viewing position,
-then places the artwork image on the facade as a presentation overlay before opening
-the detail panel. The two Song Wat murals include calibrated starter values in
-`src/artMap/artData.ts`; new works can tune the camera and facade size, rotation, and
-pixel offset from `/admin`. These facade overlays are a visual layer above the map
-buildings, so precise architectural alignment still benefits from manual calibration.
+then renders its photograph as a depth-tested vertical mesh on the building facade
+before opening the detail panel. The two Song Wat murals include calibrated starter
+values in `src/artMap/artData.ts`; new works can enable **ติดภาพเข้ากับผนังอาคาร** in
+`/admin` and tune wall endpoints, outward bearing, dimensions, height, and approach
+distance in metres. The supplied values are visual starter calibration from the
+reference photos, not a survey-grade building model; refine them against current
+Street View or field measurements for production accuracy.
 
 ## Existing AahhMap — standalone map
 

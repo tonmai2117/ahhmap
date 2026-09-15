@@ -44,9 +44,7 @@ export function photoUV(crop: FacadePlacement['crop'], u: number, v: number): [n
   const det = dx1 * dy2 - dx2 * dy1
   const g = Math.abs(det) < 1e-9 ? 0 : (dx3 * dy2 - dx2 * dy3) / det
   const h = Math.abs(det) < 1e-9 ? 0 : (dx1 * dy3 - dx3 * dy1) / det
-  // Homography coordinates use the same top-to-bottom v as the source photo;
-  // convert to Three's bottom-origin texture v only in the returned coordinate.
-  const t = v
+  const t = 1 - v
   const divisor = g * u + h * t + 1
   const x = ((p1[0] - p0[0] + g * p1[0]) * u + (p3[0] - p0[0] + h * p3[0]) * t + p0[0]) / divisor
   const y = ((p1[1] - p0[1] + g * p1[1]) * u + (p3[1] - p0[1] + h * p3[1]) * t + p0[1]) / divisor

@@ -1,9 +1,106 @@
 # Bangkok Art Map
 
-Bangkok Art Map is the exhibition-style map experience added to this Vite/React project.
+Bangkok Art Map is an exhibition-style 3D map of street art in Bangkok. The current
+handoff branch is [`bangkok-art-map`](https://github.com/tonmai2117/ahhmap/tree/bangkok-art-map).
 The public experience is available at `/` or `/art-map`; the content workspace is at
-`/admin`. The original AahhMap experience remains available at `/map` while the new
-art-map flow is reviewed.
+`/admin`.
+
+## Handoff quick start
+
+```sh
+git clone -b bangkok-art-map https://github.com/tonmai2117/ahhmap.git
+cd ahhmap
+npm ci
+npm run dev
+```
+
+Then open `http://localhost:5173/`. The first screen is the Bangkok Art Map; open
+`http://localhost:5173/admin` to add or edit artwork records.
+
+Before opening a pull request, run:
+
+```sh
+npm test -- --run src/standalone/facadeGeometry.test.ts
+npm run typecheck
+npm run build
+```
+
+The production Site is [aahhmap-map.pannawat2117.chatgpt.site](https://aahhmap-map.pannawat2117.chatgpt.site/).
+The `/admin` page currently stores records in this browser's local storage; it is a
+working demo adapter, not a shared CMS. Replace the adapter in `src/artMap/artData.ts`
+when connecting a shared database and object storage.
+
+## What the 3D facade feature does
+
+Clicking a published artwork marker flies the camera into the Song Wat area and then
+shows the artwork image as a real vertical mesh in the MapLibre 3D scene. The mesh
+uses the same WebGL depth buffer as the building extrusions, so it stays fixed to the
+building when the camera rotates and can be occluded by geometry. The image is not a
+screen-facing HTML overlay.
+
+The two reference murals are seeded in `src/artMap/artData.ts`:
+
+- `songwat-elephant` — the elephant mural
+- `songwat-woman` — the woman, flower, and butterfly mural
+
+The placement values are starter calibration from the supplied photos. They should be
+refined against current Street View or field measurements before treating the facade
+as survey-accurate; OpenFreeMap building footprints and heights are approximate.
+
+## Adding an artwork and attaching it to a wall
+
+1. Open `/admin` and complete the title, artist, location, and artwork image.
+2. Enable **ติดภาพเข้ากับผนังอาคาร** for a graffiti/mural.
+3. Enter the wall start/end longitude and latitude, the outward wall bearing
+   (0° = north, 90° = east), and the artwork width, height, and bottom offset in metres.
+4. Set `ตำแหน่งตามแนวผนัง` from `0` to `1` and choose a camera approach distance.
+5. Choose **เผยแพร่**, save, and reload the map. The map's artwork switcher can be used
+   to fly directly to the new work.
+
+The optional `crop` field in `FacadePlacement` maps four normalized source-photo
+ corners (top-left, top-right, bottom-right, bottom-left) onto the wall. Use it when
+ the source photo includes surrounding architecture or was taken at an angle. New
+ records without a crop use the complete source image.
+
+## Code map
+
+| File | Responsibility |
+| --- | --- |
+| `src/pages/ArtMap.tsx` | Public map flow, intro, marker selection, camera flight, detail/photo dialog |
+| `src/pages/Admin.tsx` | Local demo content editor and physical facade fields |
+| `src/artMap/artData.ts` | Artwork type, seed records, local-storage adapter and defaults |
+| `src/artMap/mapScene.ts` | MapLibre style, 3D building layer and facade camera calculation |
+| `src/artMap/FacadeLayer.ts` | Three.js custom layer; depth-tested facade meshes and image textures |
+| `src/artMap/facadeGeometry.ts` | Meter-based wall layout, photo homography, validation |
+| `src/artMap/artMap.css` | Public map layout, focused detail panel, responsive controls |
+| `src/artMap/admin.css` | Admin form and collection styling |
+| `src/standalone/facadeGeometry.test.ts` | Facade corner mapping and validation regression tests |
+| `public/artworks/` | Seed mural photos used by the demo records |
+
+## Working notes for maintainers
+
+- Keep `FacadeLayer` after the `linemap-3d-buildings` layer. Its shared depth buffer is
+  what makes the wall relationship visible when orbiting.
+- Facade dimensions are metres, not screen pixels. Do not reintroduce the old pixel
+  offset overlay fields for new work.
+- `wallStart` and `wallEnd` must describe the same physical wall edge. `outwardBearing`
+  points from that wall toward the viewer-facing side.
+- Keep image uploads at or below 4 MB in the demo admin. A production adapter should
+  move these blobs to object storage instead of local storage.
+- Map tiles require internet access. The current basemap is OpenFreeMap Liberty with
+  a restrained CI palette; replace it with a licensed provider for production SLAs.
+
+## Git and deployment handoff
+
+The GitHub handoff branch is `bangkok-art-map`; keep feature work there unless the team
+agrees on a new branch. The repository also has a Sites remote used by the published
+version. `.openai/hosting.json` must keep the existing `project_id` and `static.directory`
+when publishing through Sites. Build `dist/` from the exact commit being released and
+deploy that version; do not package a different working tree than the pushed commit.
+
+For a normal dev handoff, the GitHub clone and `npm run dev` steps above are sufficient.
+For a production release, run the validated build, push the commit, then use the
+workspace's Sites publishing flow so the public URL remains unchanged.
 
 The demo admin uses browser-local storage so the full upload → pin → publish flow can
 be tried immediately without credentials. The `src/artMap/artData.ts` adapter is the
